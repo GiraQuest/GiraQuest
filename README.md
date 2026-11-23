@@ -4,6 +4,10 @@
 
 **Install apps on your Meta Quest 2 and 3 — no PC needed.**
 
+## Trailer
+
+[![Watch the GiraQuest trailer](https://img.youtube.com/vi/ca0cfp7k2qA/hqdefault.jpg)](https://youtube.com/shorts/ca0cfp7k2qA)
+
 GiraQuest is a free, all-in-one installer and file manager for Meta Quest headsets. Install APK files, place OBB/data folders and manage your files, all on the headset. No PC, no cables, no ADB.
 
 ## What it does
