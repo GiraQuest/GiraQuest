@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Píldora oscura para el estado de un permiso en el onboarding
+     (v0.1.34): el texto va en amarillo vivo (pendiente) o verde vivo
+     (concedido) sobre tinta oscura, con contraste alto en tema claro
+     y oscuro, sea cual sea el fondo de la tarjeta. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/gira_ink" />
+    <corners android:radius="12dp" />
+</shape>

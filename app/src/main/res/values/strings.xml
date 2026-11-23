@@ -1,0 +1,455 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GiraQuest</string>
+
+    <!-- Notificación de emparejamiento ADB -->
+    <string name="notif_pairing_channel">Emparejamiento ADB</string>
+    <string name="notif_pairing_channel_desc">Avisos del emparejamiento por código con la depuración inalámbrica.</string>
+    <string name="notif_pairing_searching">Buscando el servicio de emparejamiento…</string>
+    <string name="notif_pairing_searching_text">Abre Ajustes → Depuración inalámbrica → Emparejar dispositivo con código.</string>
+    <string name="notif_pairing_code_hint">Código de 6 dígitos</string>
+    <string name="notif_pairing_code_action">Escribir código</string>
+    <string name="notif_pairing_found">Servicio de emparejamiento encontrado</string>
+    <string name="notif_pairing_found_text">Escribe aquí el código de 6 dígitos que muestra Ajustes.</string>
+    <!-- v0.1.7: la notificación es la vía PRINCIPAL para escribir el código
+         sin salir de Ajustes (bajar la barra no cierra su diálogo, cambiar
+         de app sí). Título con el nombre de la app y puerto en el texto. -->
+    <string name="notif_pairing_title">GiraQuest — escribe el código de emparejamiento</string>
+    <string name="notif_pairing_found_port">Puerto %1$d — escribe aquí el código de 6 dígitos que muestra Ajustes, sin salir de Ajustes.</string>
+    <string name="notif_pairing_gone_text">El diálogo de emparejar de Ajustes se cerró. Ábrelo de nuevo: esta notificación se actualiza sola con el puerto nuevo.</string>
+    <string name="notif_pairing_searching_timeout">Se acabó el tiempo buscando el servicio de emparejamiento. Pulsa Emparejar otra vez y abre «Emparejar dispositivo con código» en Ajustes.</string>
+    <string name="notif_pairing_ok">Emparejado correctamente</string>
+    <string name="notif_pairing_ok_text">GiraQuest ya puede instalar APKs y copiar OBBs sin PC.</string>
+    <string name="notif_pairing_failed">Emparejamiento fallido</string>
+    <string name="notif_pairing_connected_fail">Emparejado, pero no se pudo conectar. Reintenta con la depuración inalámbrica activa.</string>
+    <string name="notif_pairing_code_wrong">Código incorrecto o caducado. Pide uno nuevo en Ajustes → Emparejar dispositivo con código.</string>
+    <string name="notif_pairing_conn_fail">No se pudo conectar al puerto de emparejamiento (ya no vale). Abre de nuevo «Emparejar dispositivo con código» en Ajustes y escribe el código nuevo.</string>
+    <string name="notif_pairing_no_service">El diálogo de emparejar de Ajustes ya no está abierto. Ábrelo de nuevo y escribe el código que muestra.</string>
+
+    <!-- Lista de juegos -->
+    <string name="item_sub_format">v%1$s · %2$s · %3$s</string>
+    <string name="state_installed">Instalado</string>
+    <string name="state_update">Actualización disponible</string>
+    <string name="state_downloaded">Descargado</string>
+    <string name="state_ahead">Por delante de la lista</string>
+    <string name="state_apk_obb">APK %1$s · OBB %2$s</string>
+    <string name="state_not_installed">No instalado</string>
+    <string name="fav_added">Añadido a favoritos</string>
+    <string name="fav_removed">Quitado de favoritos</string>
+    <string name="search_hint">Buscar juego, paquete…</string>
+    <string name="filter_all">Todos</string>
+    <string name="filter_installed">Instalados</string>
+    <string name="filter_updates">Actualizaciones</string>
+    <string name="filter_favs">Favoritos</string>
+    <string name="filter_downloaded">Descargados</string>
+    <string name="toggle_view">Lista / Galería</string>
+    <string name="add_repo">Añadir repo</string>
+    <string name="refresh">Actualizar</string>
+    <string name="loading_repos">Cargando repos…</string>
+    <string name="empty_no_repo">Sin repositorios configurados.\n\nPulsa “Añadir repo” arriba (o ve a Ajustes) para añadir un repositorio válido. Quedará activo hasta que decidas quitarlo en Ajustes.</string>
+    <string name="empty_no_results">Nada coincide con esa búsqueda o filtro.</string>
+
+    <!-- Detalle / confirmación -->
+    <string name="detail_package">Paquete: %1$s</string>
+    <string name="detail_version">Versión: %1$s (%2$d)</string>
+    <string name="detail_size">Tamaño APK: %1$s</string>
+    <string name="detail_has_obb">Incluye OBB (se instala automáticamente).</string>
+    <string name="detail_obb_unknown">OBB: sin determinar (se sabrá al descargar; viene dentro del archivo del juego).</string>
+    <string name="detail_owned_files">Necesita los archivos originales del juego (los pones tú).</string>
+    <string name="detail_repo">Repo: %1$s</string>
+    <string name="detail_state">Estado: %1$s</string>
+    <string name="install">Instalar</string>
+    <!-- v0.1.24: la ficha ya muestra "Instalado" y el botón dice
+         "Reinstalar" (o "Actualizar" si hay versión nueva) en vez de
+         "Instalar" siempre: el usuario reinstaló sin querer A Fisherman's Tale
+         (10:23:40) porque nada distinguía los estados. -->
+    <string name="reinstall">Reinstalar</string>
+    <string name="update_install">Actualizar</string>
+    <string name="confirm_reinstall_title">¿Reinstalar %1$s?</string>
+    <string name="confirm_reinstall_message">Ya está instalado (versión %1$s). Se reinstalará desde lo descargado, con su OBB. Hazlo solo si algo quedó mal tras la primera instalación.</string>
+    <string name="close">Cerrar</string>
+    <string name="fav">Favorito</string>
+    <string name="unfav">Quitar favorito</string>
+    <string name="cancel">Cancelar</string>
+    <string name="add">Añadir</string>
+    <string name="confirm_title">¿Instalar %1$s?</string>
+    <string name="confirm_obb">Sí, con OBB (se descarga e instala automáticamente).</string>
+    <string name="confirm_no_obb">Solo APK, sin OBB.</string>
+    <string name="confirm_message">Versión %1$s · APK %2$s\n%3$s</string>
+
+    <!-- Añadir repo -->
+    <string name="add_repo_hint">{"baseUri":"https://servidor.com/","password":"..."}\n(o URL + contraseña en dos líneas)</string>
+    <string name="add_repo_title">Añadir repositorio</string>
+    <string name="add_repo_message">Pega la URL de un repo.json o la configuración del repositorio (JSON con baseUri y password, o URL y contraseña en dos líneas). Si es válido, quedará activo hasta que lo quites en Ajustes.</string>
+    <string name="repo_adding">Comprobando y descargando índice del repositorio…</string>
+    <string name="repo_added">Repo “%1$s” añadido (%2$d juegos).</string>
+    <string name="repo_failed">No se pudo leer el repo: %1$s</string>
+    <string name="repo_invalid_input">Pega una dirección válida (con su contraseña si es un repositorio VRP).</string>
+
+    <!-- Progreso -->
+    <string name="progress_apk">Descargando APK… %1$d%%</string>
+    <string name="progress_apk_speed">Descargando APK… %1$d%% (%2$s)</string>
+    <string name="progress_obb">Descargando OBB… %1$d%%</string>
+    <string name="progress_obb_speed">Descargando OBB… %1$d%% (%2$s)</string>
+    <string name="progress_game">Descargando juego… %1$d%%</string>
+    <string name="progress_game_speed">Descargando juego… %1$d%% (%2$s)</string>
+    <string name="progress_obb_pending">%1$s: OBB pendiente</string>
+    <string name="progress_installtxt">install.txt: %1$s</string>
+
+    <!-- Repositorio VRP -->
+    <string name="confirm_vrp">Se descarga el juego completo (APK + OBB dentro del archivo) desde el repositorio configurado.</string>
+    <string name="empty_public_error">No se pudo cargar el repositorio configurado. Comprueba la conexión y pulsa Actualizar.</string>
+    <string name="public_error_hint">Detalle completo en Descargas/GiraQuest-startup.log</string>
+    <string name="cf_title">Comprobación del navegador</string>
+    <string name="cf_checking">Comprobando el navegador… (Cloudflare)</string>
+    <string name="cf_tap_checkbox">Si aparece una casilla de verificación, tócala para continuar.</string>
+    <string name="cf_retrying">Comprobación superada, cargando el repositorio…</string>
+    <string name="cf_blocked_message">Cloudflare bloquea también al navegador del móvil (HTTP 403). Ni la app ni el navegador pasan el control: prueba más tarde o con otra red y pulsa Actualizar.</string>
+    <string name="public_repo_switch">Repositorio público de juegos</string>
+
+    <!-- Instaladas -->
+    <string name="uninstall_title">¿Desinstalar %1$s?</string>
+    <string name="uninstall_message">Se borra la app (%1$s), su OBB y sus datos. No se puede deshacer.</string>
+    <string name="uninstall">Desinstalar</string>
+    <string name="show_ours_only">Solo las de GiraQuest</string>
+    <string name="show_all">Mostrar todas</string>
+    <string name="installed_sub_format">v%1$s (%2$d) · %3$s%4$s</string>
+    <string name="empty_installed">Nada instalado por GiraQuest todavía.\n\n¡Elige un juego de la lista y dale a Instalar!</string>
+
+    <!-- Local -->
+    <string name="local_copy_failed">No se pudo copiar el APK.</string>
+    <string name="local_copied">Copiados %1$d APKs a la carpeta local.</string>
+    <string name="local_empty">Sin APKs locales.\nCarpeta: %1$s</string>
+    <string name="local_confirm">Se instalará este APK suelto. Si hay una carpeta con su mismo nombre junto al APK, se copiará como OBB.</string>
+    <string name="local_sub_format">%1$s · v%2$s (%3$d) · %4$s%5$s</string>
+    <string name="pick_apk">Elegir otro archivo…</string>
+    <string name="pick_folder">Elegir carpeta de APKs</string>
+
+    <!-- Tráilers (búsqueda YouTube como el PC) -->
+    <string name="trailer_title">Tráiler</string>
+    <string name="trailer_watch">Ver tráiler</string>
+    <string name="trailer_searching">Buscando tráiler en YouTube…</string>
+    <string name="trailer_disabled">Tráilers desactivados en Ajustes.</string>
+    <string name="no_trailer_found">No Trailer found</string>
+    <string name="trailer_open_youtube">Abrir en YouTube</string>
+    <string name="trailer_open_failed">No se pudo abrir YouTube.</string>
+    <string name="trailers_switch">Mostrar tráilers de YouTube</string>
+    <string name="detail_downloads">Descargas: %1$d</string>
+    <string name="detail_downloads_unknown">Descargas: no indicado por el repo</string>
+    <string name="detail_no_description">Sin descripción.</string>
+
+    <!-- Ajustes -->
+    <string name="settings_no_repos">Sin repos añadidos.</string>
+    <string name="settings_saved">Ajustes guardados.</string>
+    <string name="remove_repo_title">Quitar repositorio</string>
+    <string name="update_none">No se pudo comprobar la actualización (revisa el repo de GitHub en Ajustes).</string>
+    <string name="update_available">Nueva versión %1$s</string>
+    <string name="update_open">Ver en GitHub</string>
+    <string name="update_latest">Ya tienes la última versión.</string>
+    <string name="about_text">GiraQuest v%1$s (%2$d)</string>
+    <string name="download_folder">Carpeta de descargas (en /sdcard/)</string>
+    <string name="bandwidth">Límite de ancho de banda (KB/s, 0 = sin límite)</string>
+    <string name="update_repo">Repo de GitHub del gestor (dueño/repo)</string>
+    <string name="auto_update">Comprobar actualizaciones al abrir</string>
+    <string name="save_settings">Guardar ajustes</string>
+    <string name="remove_repo">Quitar repo…</string>
+    <string name="check_update">Comprobar actualización</string>
+    <string name="repos_title">Repositorios:</string>
+    <string name="share_log">Compartir log</string>
+    <string name="view_log">Ver log</string>
+    <string name="log_title">Log de arranque</string>
+    <string name="log_empty">El log está vacío.</string>
+    <string name="log_exported">Log guardado en Descargas como GiraQuest-startup.log</string>
+    <string name="log_export_failed">No se pudo guardar el log en Descargas.</string>
+    <string name="log_shared">Log actual compartido (archivo con versión y fecha).</string>
+    <string name="log_copy">Copiar</string>
+    <string name="log_copied">Log copiado al portapapeles.</string>
+
+    <!-- Cadenas del servicio de emparejamiento ADB (sin UI propia desde
+         la v0.1.26: el asistente se eliminó; el servicio queda para uso
+         interno). -->
+    <string name="overlay_pair_title">GiraQuest — código de emparejamiento</string>
+    <string name="overlay_pair_drag_hint">Arrastra desde aquí para mover la ventana</string>
+    <string name="overlay_pair_port">Puerto: %1$d</string>
+    <string name="overlay_pair_no_service">Sin servicio: abre en Ajustes «Emparejar dispositivo con código».</string>
+    <string name="overlay_pair_hint">Código de 6 dígitos</string>
+    <string name="overlay_pair_button">Emparejar</string>
+    <string name="overlay_pair_close">Cerrar</string>
+    <string name="overlay_pairing">Emparejando…</string>
+    <string name="pair_result_ok">Emparejado y conectado. Ya puedes instalar APK+OBB sin PC.</string>
+    <string name="pair_result_code_wrong">Código incorrecto o caducado. Pide uno nuevo en Ajustes y reintenta. Causa: %1$s</string>
+    <string name="pair_result_conn_fail">No se pudo conectar a %1$s:%2$d — ese puerto ya no vale (el diálogo de Ajustes se cerró o se abrió uno nuevo; el puerto cambia cada vez). Abre «Emparejar dispositivo con código» en Ajustes, deja el diálogo abierto y reintenta con el código nuevo. Causa: %3$s</string>
+    <string name="pair_result_no_service_now">No hay ningún servicio de emparejamiento ahora mismo. En Ajustes pulsa «Emparejar dispositivo con código» y DEJA ese diálogo abierto, luego pulsa Emparejar. Si la detección no lo encuentra, escribe a mano la IP y el puerto que muestra Ajustes y pulsa Emparejar.</string>
+    <string name="pair_result_no_code">Escribe el código de 6 dígitos que muestra Ajustes.</string>
+    <string name="pair_result_no_connect">Emparejado, pero no se pudo conectar. Comprueba que la depuración inalámbrica sigue activa y reintenta.</string>
+    <string name="pair_result_adb_down">ADB no disponible: %1$s</string>
+
+    <!-- Cabecera GiraQuest -->
+    <string name="header_tagline">Tu biblioteca de juegos VR, sin PC</string>
+    <string name="covers_loading_index">Cargando catálogo de juegos… (la primera vez esto puede tardar)</string>
+
+    <!-- v0.1.27: pestañas con explicación (el usuario: no se entendía para
+         qué era cada sección) -->
+    <string name="tab_title_games">Principal</string>
+    <string name="paypal_btn">PayPal</string>
+    <string name="paypal_invite">¿Me invitas a un café?</string>
+    <string name="paypal_url">https://paypal.me/girarkastwitch</string>
+    <string name="paypal_open_failed">No se pudo abrir el enlace de PayPal.</string>
+    <string name="launch_game">Iniciar</string>
+    <string name="launch_game_failed">No se pudo iniciar %1$s.</string>
+    <string name="tab_title_installed">Instaladas</string>
+    <string name="tab_title_local">Local</string>
+    <string name="tab_title_settings">Ajustes</string>
+    <string name="tab_games_info">Explora el catálogo, toca un juego para ver su ficha y descargarlo e instalarlo.</string>
+    <string name="tab_installed_info">Juegos instalados por GiraQuest: aquí se ve si su OBB está copiado y se puede reintentar o desinstalar.</string>
+    <string name="tab_local_info">Instala un archivo .apk que tengas en las gafas: toca uno de la lista o elige otro archivo. Sin descargar nada.</string>
+    <string name="tab_settings_info">Carpeta de descargas, repos, tráilers, log y versión de la app.</string>
+
+    <!-- v0.1.27: ordenar la lista (el orden se recuerda entre arranques) -->
+    <string name="sort_label">Ordenar por:</string>
+    <string name="sort_index">Índice</string>
+    <string name="sort_popular">Más populares</string>
+    <string name="sort_az">A–Z</string>
+    <string name="sort_new">Nuevos</string>
+    <string name="sort_size">Tamaño</string>
+    <string name="sort_size_asc">Tamaño ↑</string>
+    <string name="sort_size_desc">Tamaño ↓</string>
+    <!-- v0.1.28: avisos honestos cuando un orden no puede cambiar nada
+         visible (falta de datos en el índice, no fallo del botón). -->
+    <string name="badge_new">NUEVO</string>
+    <string name="popularity_rank">Popularidad %1$s</string>
+    <!-- v0.1.29: desinstalar la versión instalada con otra firma
+         (INSTALL_FAILED_UPDATE_INCOMPATIBLE). -->
+    <string name="uninstall_current_version">Desinstalar la versión actual</string>
+    <string name="uninstall_current_hint">Desinstala la versión actual y vuelve a instalar desde GiraQuest.</string>
+    <string name="uninstall_signature">Ya está instalado con otra firma (versión de la tienda u otra fuente). Desinstala la versión actual para instalar esta.</string>
+    <!-- v0.1.29: concesión SAF de Android/obb (vía de escape EACCES). -->
+    <string name="grant_obb_folder">Conceder Android/obb</string>
+    <string name="settings_grant_root">Conceder acceso a Android/obb</string>
+    <string name="saf_tree_granted">Carpeta Android/obb concedida. Reintentando la copia del OBB…</string>
+    <string name="saf_tree_failed">No se pudo conceder la carpeta. Inténtalo de nuevo.</string>
+    <string name="saf_tree_needed">La copia directa no tiene permiso en Android/obb. Concede la carpeta para copiar por SAF.</string>
+    <!-- v0.1.37: reinicio limpio para activar MOUNT_EXTERNAL_INSTALLER tras conceder REQUEST_INSTALL_PACKAGES. -->
+    <string name="restarting_to_activate_obb">Activando acceso a Android/obb…</string>
+    <string name="onboarding_obb_needs_restart">Pendiente de reinicio</string>
+    <string name="onboarding_obb_activate_now">Activar ahora (reinicio rápido)</string>
+    <string name="onboarding_obb_probe_restart">Falta un reinicio rápido tras conceder «Instalar apps desconocidas» para activar Android/obb. Pulsa «Activar ahora» o «Empezar».</string>
+    <string name="settings_obb_ready">Activo ✓ (permiso de instalación activo en el proceso)</string>
+    <string name="settings_obb_restart_needed">Permisos concedidos — pulsa «Activar acceso a Android/obb» para reiniciar 1 vez y activarlo</string>
+    <string name="settings_obb_missing_install">Falta activar «Instalar aplicaciones desconocidas»</string>
+    <string name="settings_obb_missing_files">Falta activar «Acceso a todos los archivos»</string>
+    <string name="settings_obb_activate_btn">Activar acceso a Android/obb</string>
+    <string name="files_android_data_restricted">En Android 11–14 el sistema restringe Android/data (para Android/obb basta con tener «Instalar apps desconocidas» y reiniciar una vez).</string>
+
+    <!-- v0.1.36: acceso al VOLUMEN (compatibilidad de recursos). -->
+    <string name="volume_unavailable">El visor no permite este acceso al almacenamiento.</string>
+    <string name="volume_cancelled">Acceso cancelado: sin este acceso los juegos se instalan sin sus datos (el OBB no se puede copiar).</string>
+    <string name="volume_usable">Acceso concedido ✓ — se pueden colocar OBBs en Android/obb. %1$s</string>
+    <string name="volume_unusable">El acceso concedido no sirve para los OBB: %1$s</string>
+    <string name="saf_tree_unusable">La carpeta concedida no sirve para los OBB: %1$s. Puedes reintentarlo o saltar este paso (sin este acceso, los juegos se instalarán sin sus datos: la copia directa falla en este visor).</string>
+    <string name="settings_obb_title">Acceso a Android/obb</string>
+    <string name="settings_obb_granted_obb">Concedido (carpeta Android/obb)</string>
+    <string name="settings_obb_granted_root">Concedido (raíz del almacenamiento)</string>
+    <string name="settings_obb_granted_other">Concedido (otra carpeta: puede no servir)</string>
+    <string name="settings_obb_pending">No concedido: sin acceso SAF a Android/obb</string>
+    <string name="settings_obb_check">Probar acceso a Android/obb</string>
+    <string name="settings_obb_check_ok">Acceso a Android/obb correcto: %1$s</string>
+    <string name="settings_obb_check_fail">Acceso a Android/obb con problemas: %1$s</string>
+    <string name="settings_obb_probe_ok">SÍ se pueden colocar OBBs: la concesión permite crear carpetas de paquete y escribir archivos en Android/obb. %1$s</string>
+    <string name="settings_obb_probe_fail">NO se pueden colocar OBBs con esta concesión: %1$s</string>
+    <string name="settings_obb_probe_none">Sin concesión: no hay nada que probar. Concede el acceso al almacenamiento para poder colocar los OBB.</string>
+    <!-- v0.1.29: explorador — archivos ocultos y motivo del listado. -->
+    <string name="files_show_hidden">Mostrar ocultos</string>
+    <string name="files_hide_hidden">Ocultar ocultos</string>
+    <string name="files_list_failed">No se pudo listar esta carpeta: %1$s</string>
+    <string name="files_empty_real">Carpeta vacía.</string>
+    <string name="size_unknown">—</string>
+
+    <!-- v0.1.27: carátulas honestas (el total es el catálogo real, no
+         las nuevas de esta pasada) -->
+    <string name="covers_loading">Cargando carátulas… %1$d de %2$d (%3$d de %4$d en caché · la primera vez esto puede tardar)</string>
+    <string name="covers_done">Carátulas listas: %1$d de %2$d juegos</string>
+
+    <!-- v0.1.27: tamaño bajo demanda y espacio libre -->
+    <string name="detail_size_download">Tamaño de descarga: %1$s</string>
+    <string name="detail_size_querying">Tamaño de descarga: consultando…</string>
+    <string name="detail_size_unavailable">Tamaño de descarga: no disponible (se sabrá al descargar)</string>
+    <string name="detail_free_space">Espacio libre: %1$s</string>
+    <string name="confirm_space">Tamaño: %1$s · Libres: %2$s · Quedarán: %3$s</string>
+    <string name="confirm_nofit">%1$s ocupa %2$s y solo tienes %3$s libres. Libera espacio o elige otro juego.</string>
+    <string name="confirm_tight">Te quedarían solo %1$s libres; la extracción necesita espacio temporal (el archivo y lo extraído a la vez).</string>
+    <string name="installing">Instalando…</string>
+
+    <!-- v0.1.27: checklist de instalación (un solo estado final
+         persistente: descarga → extracción → APK → OBB) -->
+    <string name="checklist_title">Instalación</string>
+    <string name="check_download">Descarga ✓ %1$s</string>
+    <string name="check_download_pending">Descarga…</string>
+    <string name="check_extract">Extracción ✓ (%1$s)</string>
+    <string name="check_extract_pending">Extracción…</string>
+    <string name="check_apk">APK instalada ✓</string>
+    <string name="check_apk_pending">APK: pendiente</string>
+    <string name="check_obb_done">OBB ✓ %1$d archivos, %2$s → /Android/obb/%3$s/</string>
+    <string name="check_obb_done_unverified">OBB ✓ %1$d archivos, %2$s → /Android/obb/%3$s/ (copiado, sin verificar)</string>
+    <string name="delete_download_title">¿Borrar la descarga de %1$s?</string>
+    <string name="delete_download">Borrar descarga</string>
+    <string name="delete_download_message">Borrar los archivos descargados de %1$s (%2$s). El juego instalado NO se toca, solo se borran la descarga y la extracción.</string>
+    <string name="delete_download_confirm">Borrar</string>
+    <string name="delete_download_done">Descarga borrada: %1$s liberados.</string>
+    <string name="delete_download_failed">No se pudo borrar la descarga: %1$s</string>
+    <string name="delete_download_busy">Se está descargando o instalando ahora mismo: espera a que termine.</string>
+    <string name="uninstall_delete_downloads">Borrar también los archivos descargados (%1$s)</string>
+    <string name="uninstall_done">Desinstalado: %1$s.</string>
+    <string name="uninstall_cancelled">Desinstalación cancelada: no se ha tocado nada.</string>
+    <string name="uninstall_failed">No se pudo desinstalar: %1$s</string>
+    <string name="check_obb_pending">OBB: %1$d de %2$d copiados — %3$s</string>
+    <string name="check_obb_none">Sin OBB (solo APK)</string>
+    <string name="check_obb_unknown">OBB: se sabrá al descargar (viene dentro del archivo del juego)</string>
+    <string name="trailer_error">No se pudo cargar el tráiler en la app (%1$s). Usa «Abrir en YouTube».</string>
+    <string name="trailer_embed_restricted">El propietario del vídeo no permite reproducirlo fuera de YouTube. Usa «Abrir en YouTube».</string>
+    <string name="trailer_video_unavailable">Este tráiler ya no está disponible en YouTube.</string>
+    <string name="check_failed">Falló: %1$s</string>
+    <string name="retry_obb">Reintentar OBB</string>
+    <string name="open_settings">Abrir Ajustes</string>
+    <string name="obb_retrying">Copiando OBB…</string>
+    <string name="obb_retried_ok">OBB completado.</string>
+    <string name="obb_retried_fail">El OBB sigue pendiente: %1$s</string>
+    <string name="banner_complete_title">Instalación completa: %1$s</string>
+    <string name="banner_pending_title">APK instalada — OBB pendiente: %1$s</string>
+    <string name="banner_failed_title">Instalación con problemas: %1$s</string>
+    <string name="dismiss">Descartar</string>
+    <string name="obb_state_copied">OBB ✓ %1$d archivos (%2$s)</string>
+    <string name="obb_state_pending">OBB pendiente: %1$s</string>
+    <string name="obb_state_not_granted">OBB pendiente: falta el permiso de archivos</string>
+    <string name="obb_state_failed">OBB sin copiar: %1$s</string>
+
+    <!-- Tarjeta de permisos (v0.1.26): se pide cada permiso con su botón
+         real, en contexto, en vez de en un asistente inicial. -->
+    <string name="perms_card_title">Faltan permisos para instalar</string>
+    <string name="perms_card_text">GiraQuest necesita estos permisos para instalar juegos y copiar sus OBB. Pulsa cada botón y actívalo en Ajustes.</string>
+    <string name="perm_btn_install">Permitir instalar apps</string>
+    <string name="perm_btn_files">Permitir acceso a archivos</string>
+    <string name="perms_missing_title">Falta un permiso</string>
+    <string name="perms_missing_msg">Para instalar este juego GiraQuest necesita: %1$s\n\nPulsa el botón para abrir Ajustes y activarlo, luego vuelve a intentarlo.</string>
+    <string name="perms_open_settings">Abrir Ajustes</string>
+    <string name="perms_settings_failed">No se pudo abrir esa pantalla de Ajustes.</string>
+    <!-- v0.1.28: onboarding de permisos de primer arranque. -->
+    <string name="onboarding_title">Permisos para empezar</string>
+    <string name="onboarding_intro">Para instalar juegos, GiraQuest necesita 4 permisos. Te los pedimos ahora, uno a uno: cada uno abre su pantalla para activarlo.</string>
+    <string name="onboarding_warning">Sin «Acceso a todos los archivos» y sin «Instalar aplicaciones desconocidas», los juegos no se pueden instalar. El acceso a Android/obb se activa automáticamente con esos dos permisos tras un reinicio rápido.</string>
+    <string name="onboarding_files_title">Acceso a todos los archivos</string>
+    <string name="onboarding_files_desc">Para copiar los OBB a Android/obb y leer las descargas.</string>
+    <string name="onboarding_install_title">Instalar aplicaciones desconocidas</string>
+    <string name="onboarding_install_desc">Para instalar los juegos y desbloquear la carpeta Android/obb en Android 11–14.</string>
+    <string name="onboarding_obb_title">Acceso a la carpeta Android/obb</string>
+    <string name="onboarding_obb_desc">Se activa automáticamente al tener «Todos los archivos» + «Instalar apps desconocidas» y reiniciar la app una vez (Android 12–14 no aplica el acceso de instalador hasta reiniciar). Al pulsar «Empezar» se reinicia sola en 1 segundo.</string>
+    <string name="onboarding_obb_skip">Saltar este paso</string>
+    <string name="onboarding_obb_skip_note">Si ya concediste los pasos 1 y 2, al pulsar «Empezar» la app aplicará el acceso a Android/obb automáticamente.</string>
+    <string name="onboarding_obb_session_note">Pulsa «Activar ahora» para verificarlo aquí mismo, o continúa y se aplicará al pulsar «Empezar».</string>
+    <string name="onboarding_obb_probe">Comprobar acceso</string>
+    <string name="onboarding_obb_probe_checking">Comprobando…</string>
+    <string name="onboarding_obb_probe_ok">Acceso comprobado ✓ — se puede escribir en Android/obb</string>
+    <string name="onboarding_obb_probe_fail">Sin acceso: %1$s</string>
+    <!-- v0.1.35: cartel compacto de instalación (el usuario, captura 58628):
+         una línea por juego, máx. 2, sin el log de errores pegado
+         (el detalle vive en la ficha del juego y en el log). -->
+    <string name="banner_compact_complete">✓ %1$s instalado por completo</string>
+    <string name="banner_compact_pending">%1$s: OBB pendiente — toca para ver el detalle</string>
+    <string name="banner_compact_failed">%1$s: instalación con problemas — toca para ver el detalle</string>
+    <string name="banner_compact_more"> (+%1$d más)</string>
+    <string name="onboarding_notif_title">Notificaciones</string>
+    <string name="onboarding_notif_desc">Para avisarte cuando un juego queda instalado del todo.</string>
+    <string name="onboarding_badge_essential">Imprescindible</string>
+    <string name="onboarding_badge_needed">Necesario</string>
+    <string name="onboarding_badge_optional">Opcional · plan B</string>
+    <string name="onboarding_grant">Conceder</string>
+    <string name="onboarding_granted">Concedido ✓</string>
+    <string name="onboarding_pending">Pendiente</string>
+    <string name="onboarding_summary_title">Resumen</string>
+    <string name="onboarding_sum_granted">✓ %1$s — Concedido</string>
+    <string name="onboarding_sum_pending">• %1$s — Pendiente</string>
+    <string name="onboarding_start">Empezar</string>
+    <string name="onboarding_skip">Continuar sin conceder</string>
+    <!-- v0.1.28: explorador de archivos propio + oferta de OBB local. -->
+    <string name="share">Compartir</string>
+    <string name="tab_title_files">Explorador</string>
+    <string name="tab_files_info">Explora el almacenamiento: instala APKs, copia OBBs y gestiona archivos sin salir de la app.</string>
+    <string name="install_apk_button">Instalar APK</string>
+    <string name="files_perm_text">El explorador necesita acceso a todos los archivos para ver el almacenamiento. Concédelo para continuar.</string>
+    <string name="files_free">Libres: %1$s</string>
+    <string name="files_root">Almacenamiento</string>
+    <string name="files_quick_downloads">Descargas</string>
+    <string name="files_quick_giraquest">GiraQuest</string>
+    <string name="files_quick_obb">Android/obb</string>
+    <string name="files_quick_data">Android/data</string>
+    <string name="files_search_hint">Buscar por nombre…</string>
+    <string name="files_sort_name">Nombre</string>
+    <string name="files_sort_size">Tamaño</string>
+    <string name="files_sort_date">Fecha</string>
+    <string name="files_new_folder">Nueva carpeta</string>
+    <string name="files_new_folder_hint">Nombre de la carpeta</string>
+    <string name="files_create">Crear</string>
+    <string name="files_folder_created">Carpeta «%1$s» creada.</string>
+    <string name="files_folder_failed">No se pudo crear la carpeta.</string>
+    <string name="files_empty">Carpeta vacía.</string>
+    <string name="files_dir_meta">Carpeta · %1$d elementos · %2$s</string>
+    <string name="files_pick_copy">Copiar %1$d elementos: elige la carpeta destino.</string>
+    <string name="files_pick_move">Mover %1$d elementos: elige la carpeta destino.</string>
+    <string name="files_paste_here">Pegar aquí</string>
+    <string name="files_selected">%1$d seleccionados</string>
+    <string name="files_copy">Copiar</string>
+    <string name="files_move">Mover</string>
+    <string name="files_rename">Renombrar</string>
+    <string name="files_delete">Borrar</string>
+    <string name="files_deleted">Borrados %1$d elementos.</string>
+    <string name="files_delete_failed">No se pudo borrar.</string>
+    <string name="files_saf_only">Copiar/mover solo vale para archivos normales (no para los vistos por SAF).</string>
+    <string name="files_paste_done">Hechos %1$d, errores %2$d.</string>
+    <string name="files_rename_title">Renombrar «%1$s»</string>
+    <string name="files_renamed">Renombrado a «%1$s».</string>
+    <string name="files_rename_failed">No se pudo renombrar.</string>
+    <string name="files_delete_title">¿Borrar %1$d elementos?</string>
+    <string name="files_apk_confirm">Se instalará este APK suelto (%1$s). Si trae OBB en su carpeta, se ofrecerá copiarlos después.</string>
+    <string name="files_obb_title">Copiar OBB «%1$s»</string>
+    <string name="files_obb_confirm">Copiar este OBB (%1$s) a /Android/obb/%2$s/ ?</string>
+    <string name="files_obb_ask_package">No se deduce el paquete del nombre del archivo. Escribe el paquete del juego (p. ej. com.ejemplo.juego).</string>
+    <string name="files_obb_bad_package">Escribe un paquete válido (p. ej. com.ejemplo.juego).</string>
+    <string name="files_obb_copy">Copiar OBB</string>
+    <string name="files_read_failed">No se pudo leer el archivo: %1$s</string>
+    <string name="files_share_failed">No se pudo compartir el archivo.</string>
+    <string name="files_7z_summary">%1$d archivos, %2$s sin comprimir en total.</string>
+    <string name="files_7z_empty">El archivo no trae entradas.</string>
+    <string name="files_7z_unreadable">No se puede listar el contenido (%1$s): puede estar protegido o dañado.</string>
+    <string name="local_obb_title">Este APK trae OBB (%1$d)</string>
+    <string name="local_obb_msg">¿Copiar los OBB (%1$s) a /Android/obb/%2$s/ ?</string>
+    <string name="local_obb_copy">Copiar OBB</string>
+    <string name="local_obb_skip">Ahora no</string>
+    <string name="local_obb_done">OBB copiados: %1$d archivos (%2$s) → /Android/obb/%3$s/</string>
+    <string name="local_obb_not_granted">OBB sin copiar: falta el permiso de acceso a archivos.</string>
+    <string name="local_obb_failed">No se pudieron copiar los OBB: %1$s</string>
+
+    <!-- Alerta animada cartoon de instalación completada -->
+    <string name="install_success_badge">¡INSTALADO!</string>
+    <string name="install_success_btn">¡A jugar!</string>
+    <string name="install_success_sub_1">¡Clavado! Póntelas y a darle caña.</string>
+    <string name="install_success_sub_2">¡Boom! Todo en su sitio, hasta el último byte.</string>
+    <string name="install_success_sub_3">¡Misión cumplida! Sin cables y sin dramas.</string>
+    <string name="install_success_sub_4">¡Nivel superado! Ya puedes entrar a viciar.</string>
+
+    <!-- Alerta animada cartoon de instalación fallida -->
+    <string name="install_failure_badge">¡UPS! FALLÓ</string>
+    <string name="install_failure_btn">Entendido</string>
+    <string name="install_failure_sub_1">¡Algo se ha atascado por el camino!</string>
+    <string name="install_failure_sub_2">¡Vaya trompazo! Revisa el motivo abajo.</string>
+    <string name="install_failure_sub_3">No pudo completarse esta instalación.</string>
+    <string name="install_failure_reason_fmt">Motivo: %1$s</string>
+    <string name="detail_updated">Actualizado: %1$s</string>
+    <string name="detail_notes_fmt">Notas del repositorio:\n%1$s</string>
+    <string name="origin_badge_meta">Oficial · Meta</string>
+    <string name="origin_badge_giraquest">GiraQuest</string>
+    <string name="origin_badge_other">Otro origen</string>
+    <string name="detail_origin_fmt">Origen instalado: %1$s</string>
+    <string name="origin_detail_meta">Oficial (Tienda de Meta)</string>
+    <string name="origin_detail_giraquest">Instalado desde GiraQuest</string>
+    <string name="origin_detail_other">Instalación externa (sideload / otro)</string>
+</resources>

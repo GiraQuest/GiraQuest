@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v0.1.27: iconos vectoriales DE COLOR, vistosos y distintos por
+     pestaña (itemIconTint="@null" en el tema para no teñirlos). -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_repo"
+        android:icon="@drawable/ic_nav_games"
+        android:title="@string/tab_title_games" />
+    <item
+        android:id="@+id/nav_installed"
+        android:icon="@drawable/ic_nav_installed"
+        android:title="@string/tab_title_installed" />
+    <item
+        android:id="@+id/nav_local"
+        android:icon="@drawable/ic_nav_local"
+        android:title="@string/tab_title_local" />
+    <item
+        android:id="@+id/nav_files"
+        android:icon="@drawable/ic_nav_files"
+        android:title="@string/tab_title_files" />
+    <item
+        android:id="@+id/nav_settings"
+        android:icon="@drawable/ic_nav_settings"
+        android:title="@string/tab_title_settings" />
+</menu>

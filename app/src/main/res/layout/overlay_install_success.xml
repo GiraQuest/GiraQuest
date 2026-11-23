@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/install_success_backdrop"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#B3120D29"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- Confeti y rayos cartoon detrás de la tarjeta -->
+    <es.girarkas.giraquest.ui.CartoonCelebrationView
+        android:id="@+id/cartoon_celebration_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Tarjeta cómic centrada -->
+    <LinearLayout
+        android:id="@+id/cartoon_success_card"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_cartoon_card"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:gravity="center_horizontal"
+        android:maxWidth="360dp"
+        android:minWidth="290dp"
+        android:orientation="vertical"
+        android:paddingStart="22dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="22dp"
+        android:paddingBottom="18dp">
+
+        <!-- Sello cómic inclinado -->
+        <TextView
+            android:id="@+id/tv_cartoon_stamp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_cartoon_stamp"
+            android:paddingStart="16dp"
+            android:paddingTop="5dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="5dp"
+            android:rotation="-5"
+            android:text="@string/install_success_badge"
+            android:textColor="@color/gira_ink"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <!-- Mascota cartoon animada -->
+        <ImageView
+            android:id="@+id/iv_cartoon_mascot"
+            android:layout_width="164dp"
+            android:layout_height="164dp"
+            android:layout_marginTop="4dp"
+            android:contentDescription="@string/install_success_badge"
+            android:scaleType="fitCenter"
+            android:src="@drawable/cartoon_install_mascot" />
+
+        <!-- Nombre del juego -->
+        <TextView
+            android:id="@+id/tv_cartoon_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="2"
+            android:textColor="@color/gira_ink"
+            android:textSize="19sp"
+            android:textStyle="bold" />
+
+        <!-- Frase divertida cartoon -->
+        <TextView
+            android:id="@+id/tv_cartoon_funny"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:textColor="@color/gira_purple_dark"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <!-- Detalle técnico compacto -->
+        <TextView
+            android:id="@+id/tv_cartoon_detail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="2"
+            android:textColor="#4B3F72"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btn_cartoon_ok"
+            style="@style/Widget.GiraQuest.Button.Secondary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:minHeight="42dp"
+            android:paddingStart="26dp"
+            android:paddingEnd="26dp"
+            android:text="@string/install_success_btn" />
+    </LinearLayout>
+
+</FrameLayout>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Banda de cabecera GiraQuest (v0.1.26, rebajada 12:52): degradado
+     violeta eléctrico → índigo profundo, con el cian de las lentes VR
+     como acento en la UI. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="45"
+        android:endColor="@color/gira_indigo"
+        android:startColor="@color/gira_purple"
+        android:type="linear" />
+    <corners android:radius="24dp" />
+</shape>

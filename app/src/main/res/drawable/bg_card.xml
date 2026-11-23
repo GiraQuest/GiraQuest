@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tarjeta redondeada GiraQuest (v0.1.26): fondo de superficie del tema
+     (claro/oscuro) con borde lila. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="?attr/colorSurface" />
+    <corners android:radius="20dp" />
+    <stroke
+        android:width="2dp"
+        android:color="@color/gira_card_stroke" />
+</shape>

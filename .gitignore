@@ -1,0 +1,17 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+*.apk
+*.aab
+app/build/
+local.properties
+
+# Build manual: clave local, artefactos y keystore (nunca se publican)
+manual-build/.api-key
+manual-build/work/
+manual-build/deps/
+manual-build/debug.keystore

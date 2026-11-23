@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fondo de la ventana flotante de emparejamiento (v0.1.7): blanco con
+     borde morado, para que los widgets del sistema se vean bien encima de
+     Ajustes. Se usa fondo claro a propósito: la ventanita se infla con el
+     contexto de la app (sin tema de actividad) y los widgets por defecto
+     se leen bien sobre blanco. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFF" />
+    <corners android:radius="12dp" />
+    <stroke android:width="2dp" android:color="#6A1B9A" />
+</shape>

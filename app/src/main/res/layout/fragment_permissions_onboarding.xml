@@ -1,0 +1,503 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Onboarding de permisos de primer arranque (v0.1.28, paso SAF en
+     v0.1.30): pantalla completa que pide los 4 permisos uno a uno,
+     cada uno con su frase de para qué sirve. Al volver de Ajustes se
+     re-comprueba y se pasa al siguiente; al final, resumen +
+     "Empezar". -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <ImageView
+            android:id="@+id/img_onboarding_logo"
+            android:layout_width="260dp"
+            android:layout_height="86dp"
+            android:layout_gravity="center_horizontal"
+            android:adjustViewBounds="true"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/giraquest_logo" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/onboarding_title"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/onboarding_intro"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="15sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_perm_card"
+            android:padding="10dp"
+            android:text="@string/onboarding_warning"
+            android:textColor="@color/gira_ink"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <!-- Paso 1: acceso a todos los archivos (imprescindible). -->
+        <LinearLayout
+            android:id="@+id/row_onboarding_files"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tv_onboarding_files_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/onboarding_files_title"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@color/gira_yellow"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp"
+                    android:text="@string/onboarding_badge_essential"
+                    android:textColor="@color/gira_ink"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tv_onboarding_files_desc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/onboarding_files_desc"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tv_onboarding_files_status"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/onboarding_pending"
+                    android:background="@drawable/bg_status_pill"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:textColor="@color/gira_yellow_bright"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btn_onboarding_files"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/onboarding_grant" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Paso 2: instalar aplicaciones desconocidas (imprescindible). -->
+        <LinearLayout
+            android:id="@+id/row_onboarding_install"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tv_onboarding_install_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/onboarding_install_title"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@color/gira_yellow"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp"
+                    android:text="@string/onboarding_badge_essential"
+                    android:textColor="@color/gira_ink"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tv_onboarding_install_desc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/onboarding_install_desc"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tv_onboarding_install_status"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/onboarding_pending"
+                    android:background="@drawable/bg_status_pill"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:textColor="@color/gira_yellow_bright"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btn_onboarding_install"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/onboarding_grant" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Paso 3: acceso a Android/obb por SAF (OPCIONAL, INFORMATIVO
+             en este visor): el selector de Android bloquea las carpetas
+             que harían falta (raíz, Android, Android/obb no se pueden
+             elegir: el usuario 2026-11-20 14:00, firme — SAF RAÍZ MUERTA, no
+             volver a proponerlo como vía). El botón "Conceder" está
+             OCULTO: no lleva a ningún sitio en este visor. Queda el
+             botón grande "Saltar este paso" y la sonda de Ajustes
+             ("Probar acceso a Android/obb"), que dice la verdad. La
+             vía nueva para colocar los OBB es la sesión del instalador
+             (InstallerSession, v0.1.34, experimental). -->
+        <LinearLayout
+            android:id="@+id/row_onboarding_obb"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tv_onboarding_obb_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/onboarding_obb_title"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@color/gira_chip_bg"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp"
+                    android:text="@string/onboarding_badge_optional"
+                    android:textColor="@color/gira_purple_dark"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tv_onboarding_obb_desc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/onboarding_obb_desc"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="14sp" />
+
+            <!-- v0.1.35: una línea que explica la vía real (sesión del
+                 instalador, v0.1.34): este paso no hace falta para
+                 instalar juegos, así que la sección ya no es solo un
+                 "no disponible". -->
+            <TextView
+                android:id="@+id/tv_onboarding_obb_session_note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/onboarding_obb_session_note"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tv_onboarding_obb_status"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/onboarding_pending"
+                    android:background="@drawable/bg_status_pill"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:textColor="@color/gira_yellow_bright"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btn_onboarding_obb"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/onboarding_obb_activate_now"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- v0.1.35: ACCIÓN REAL de la sección (el usuario, captura
+                 58629): "Comprobar acceso" corre una sonda de
+                 escritura por la API de archivos (crear + escribir +
+                 borrar una carpeta de prueba en Android/obb, exactamente
+                 lo que necesitaría la copia) y enseña el resultado en
+                 la propia sección. NO abre ningún selector (SAF RAÍZ
+                 MUERTA: prohibido re-proponerlo). -->
+            <Button
+                android:id="@+id/btn_onboarding_obb_probe"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/onboarding_obb_probe" />
+
+            <TextView
+                android:id="@+id/tv_onboarding_obb_probe_result"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Salto OBVIO de este paso (v0.1.31): nadie se queda
+                 atascado aquí. -->
+            <TextView
+                android:id="@+id/tv_onboarding_obb_skip_note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/onboarding_obb_skip_note"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btn_onboarding_obb_skip"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/onboarding_obb_skip" />
+        </LinearLayout>
+
+        <!-- Paso 4: notificaciones (necesario para el aviso de completado). -->
+        <LinearLayout
+            android:id="@+id/row_onboarding_notify"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tv_onboarding_notify_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/onboarding_notif_title"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@color/gira_chip_bg"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp"
+                    android:text="@string/onboarding_badge_needed"
+                    android:textColor="@color/gira_purple_dark"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tv_onboarding_notify_desc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/onboarding_notif_desc"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tv_onboarding_notify_status"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/onboarding_pending"
+                    android:background="@drawable/bg_status_pill"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:textColor="@color/gira_yellow_bright"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btn_onboarding_notify"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/onboarding_grant" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Resumen final: solo cuando los 3 pasos están resueltos
+             (concedidos o visitados y vueltos sin conceder). -->
+        <LinearLayout
+            android:id="@+id/card_onboarding_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_perm_card"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/onboarding_summary_title"
+                android:textColor="@color/gira_ink"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_onboarding_sum_files"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tv_onboarding_sum_install"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tv_onboarding_sum_obb"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tv_onboarding_sum_notify"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btn_onboarding_start"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/onboarding_start" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btn_onboarding_skip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:padding="10dp"
+            android:text="@string/onboarding_skip"
+            android:textColor="@color/gira_purple_dark"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+</ScrollView>

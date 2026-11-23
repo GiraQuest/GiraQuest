@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GiraQuest — GPLv3. Gestor de juegos y apps para Meta Quest. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Necesario para el descubrimiento mDNS (_adb-tls-pairing / _adb-tls-connect). -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Requerido en API 34+ para un servicio con foregroundServiceType
+         connectedDevice (el de emparejamiento). Inofensivo en API 32. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- v0.1.7: ventana flotante de emparejamiento encima de Ajustes
+         (SYSTEM_ALERT_WINDOW, se concede en Ajustes del sistema). -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <!-- v0.1.28: sin QUERY_ALL_PACKAGES, en API 30+ (Quest Android 14)
+         getInstalledPackages() devuelve una lista FILTRADA y la pestaña
+         "Instaladas" no ve los juegos instalados. App sideloaded, sin
+         Play: no hay problema de política. También hace visibles los
+         paquetes para getPackageInfo() por paquete (estado de lista). -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- v0.1.25: WRITE_SECURE_SETTINGS, para re-activar la depuración
+         inalámbrica sola tras sueño/reinicio (Settings.Global.putInt
+         "adb_wifi_enabled", 1, patrón de Oculus Wireless ADB). Es un
+         permiso signature|privileged: declararlo NO lo concede — se
+         concede con `pm grant` vía ADB al emparejar (grantWriteSecureSettings).
+         Sin declararlo, el pm grant fallaba en silencio (el permiso no
+         existe para la app) y la re-activación directa era imposible. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+
+    <application
+        android:name=".GiraQuestApp"
+        android:allowBackup="true"
+        android:extractNativeLibs="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.GiraQuest"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Reproductor de tráilers: WebView + IFrame API de YouTube
+             (equivale al WebView2 + player.html del PC). -->
+        <activity
+            android:name=".trailer.TrailerActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:hardwareAccelerated="true" />
+
+        <!-- Pase de Cloudflare (v0.1.10): WebView que pasa el challenge del
+             mirror y deja la cookie cf_clearance para OkHttp. -->
+        <activity
+            android:name=".ui.CloudflareActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:hardwareAccelerated="true" />
+
+        <!-- Servicio en primer plano: emparejamiento ADB por código.
+             Publica la notificación con RemoteInput para escribir los 6 dígitos
+             sin cerrar el diálogo de Ajustes (como Shizuku / LADB). -->
+        <service
+            android:name=".adb.PairingService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <receiver
+            android:name=".adb.PairingCodeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="es.girarkas.giraquest.ACTION_PAIRING_CODE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Fallback PackageInstaller: instalación con confirmación del sistema
+             cuando el ADB embebido no está disponible (el OBB en ese modo no es
+             fiable; la app avisa). -->
+        <activity
+            android:name=".install.PackageInstallerFallback$InstallResultActivity"
+            android:exported="false" />
+
+        <!-- Proceso auxiliar para reiniciar el proceso principal tras conceder
+             REQUEST_INSTALL_PACKAGES (activa MOUNT_EXTERNAL_INSTALLER en Zygote). -->
+        <activity
+            android:name=".install.ProcessRebirth$PhoenixActivity"
+            android:exported="false"
+            android:process=":phoenix"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+</manifest>

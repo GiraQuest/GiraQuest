@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ventana flotante de emparejamiento (v0.1.7): flota ENCIMA de Ajustes
+     para escribir el código sin salir de Ajustes. En el Xiaomi del usuario el
+     diálogo "Emparejar dispositivo con código" de Ajustes se cierra al
+     cambiar de app (y todo se reinicia: código y puerto nuevos), así que
+     copiar el código a la app era imposible. Con esta ventanita el código
+     se escribe encima de Ajustes. Se arrastra desde el título para no
+     tapar el código. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/overlay_pair_bg"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/tv_overlay_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/overlay_pair_title"
+        android:textColor="#111111"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/overlay_pair_drag_hint"
+        android:textColor="#666666"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/tv_overlay_port"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/overlay_pair_no_service"
+        android:textColor="#111111"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/et_overlay_code"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:hint="@string/overlay_pair_hint"
+        android:inputType="number"
+        android:maxLength="6"
+        android:textColor="#111111"
+        android:textSize="22sp" />
+
+    <Button
+        android:id="@+id/btn_overlay_pair"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/overlay_pair_button" />
+
+    <TextView
+        android:id="@+id/tv_overlay_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="#111111" />
+
+    <Button
+        android:id="@+id/btn_overlay_close"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="@string/overlay_pair_close" />
+
+</LinearLayout>

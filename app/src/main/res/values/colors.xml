@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paleta GiraQuest: violeta eléctrico + cian de lente VR + acentos sobrios. -->
+<resources>
+    <color name="gira_pink">#D6336C</color>
+    <color name="gira_pink_dark">#A8244F</color>
+    <color name="gira_purple">#6C4CF1</color>
+    <color name="gira_purple_dark">#4A2FD6</color>
+    <color name="gira_indigo">#2E1A6B</color>
+    <color name="gira_yellow">#FFB020</color>
+    <color name="gira_yellow_dark">#E69A00</color>
+    <color name="gira_yellow_bright">#FFEB3B</color>
+    <color name="gira_green_bright">#69F0AE</color>
+    <color name="gira_amber_dark">#8A6D00</color>
+    <color name="gira_turquoise">#14B8A6</color>
+    <color name="gira_turquoise_dark">#0E8074</color>
+    <color name="gira_cyan">#22D3EE</color>
+    <color name="gira_cream">#F4F1FF</color>
+    <color name="gira_ink">#1B1437</color>
+    <color name="gira_green">#2E9E5B</color>
+    <color name="gira_red">#D32F2F</color>
+    <color name="gira_chip_bg">#ECE7FB</color>
+    <color name="gira_card_stroke">#DCD6F7</color>
+</resources>

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.GiraQuest" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/gira_purple</item>
+        <item name="colorPrimaryVariant">@color/gira_purple_dark</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+        <item name="colorSecondary">@color/gira_cyan</item>
+        <item name="colorTertiary">@color/gira_yellow</item>
+        <item name="materialButtonStyle">@style/Widget.GiraQuest.Button</item>
+        <item name="bottomNavigationStyle">@style/Widget.GiraQuest.BottomNav</item>
+    </style>
+
+    <style name="Widget.GiraQuest.Button" parent="Widget.Material3.Button">
+        <item name="android:minHeight">44dp</item>
+        <item name="android:minWidth">100dp</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@android:color/white</item>
+        <item name="cornerRadius">22dp</item>
+        <item name="backgroundTint">@color/gira_purple</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">18dp</item>
+    </style>
+
+    <style name="Widget.GiraQuest.Button.Secondary" parent="Widget.GiraQuest.Button">
+        <item name="backgroundTint">@color/gira_turquoise</item>
+    </style>
+
+    <style name="Widget.GiraQuest.Button.Sunny" parent="Widget.GiraQuest.Button">
+        <item name="backgroundTint">@color/gira_yellow</item>
+        <item name="android:textColor">@color/gira_ink</item>
+    </style>
+
+    <!-- Chips compactos sin insets verticales de Material3 (~28dp reales). -->
+    <style name="Widget.GiraQuest.Button.Chip" parent="Widget.GiraQuest.Button">
+        <item name="android:minHeight">28dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingTop">0dp</item>
+        <item name="android:paddingBottom">0dp</item>
+        <item name="android:paddingStart">11dp</item>
+        <item name="android:paddingEnd">11dp</item>
+        <item name="android:textSize">12sp</item>
+        <item name="cornerRadius">14dp</item>
+        <item name="backgroundTint">@color/gira_purple</item>
+        <item name="android:layout_marginEnd">6dp</item>
+    </style>
+
+    <style name="Widget.GiraQuest.BottomNav" parent="Widget.Material3.BottomNavigationView">
+        <item name="backgroundTint">@color/gira_purple</item>
+        <item name="itemIconTint">@null</item>
+        <item name="itemTextColor">@android:color/white</item>
+        <item name="itemIconSize">20dp</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="itemPaddingTop">2dp</item>
+        <item name="itemPaddingBottom">2dp</item>
+        <item name="itemTextAppearanceActive">@style/Widget.GiraQuest.BottomNav.Label</item>
+        <item name="itemTextAppearanceInactive">@style/Widget.GiraQuest.BottomNav.Label</item>
+    </style>
+
+    <style name="Widget.GiraQuest.BottomNav.Label" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">10sp</item>
+    </style>
+
+    <style name="GiraQuestSectionTitle">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/gira_purple_dark</item>
+    </style>
+
+    <style name="GiraQuestEmpty">
+        <item name="android:textSize">16sp</item>
+        <item name="android:lineSpacingMultiplier">1.3</item>
+    </style>
+</resources>

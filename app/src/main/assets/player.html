@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Trailer Player</title>
+<style>
+html,body { margin:0; background:#000; height:100%; overflow:hidden; }
+#player { width:100vw; height:100vh; }
+</style>
+<!-- Reproductor de tráilers con YouTube IFrame API (con origin HTTPS válido para evitar Error 153). -->
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+let player;
+let pendingId = null;
+function onYouTubeIframeAPIReady() {
+    player = new YT.Player('player', {
+        width: '100%',
+        height: '100%',
+        playerVars: {
+            autoplay: 1,
+            playsinline: 1,
+            mute: 0,
+            rel: 0,
+            iv_load_policy: 3,
+            fs: 1,
+            enablejsapi: 1,
+            origin: window.location.origin
+        },
+        events: {
+            'onReady': () => {
+                if (pendingId) {
+                    player.loadVideoById(pendingId);
+                    pendingId = null;
+                }
+            },
+            'onError': (e) => {
+                if (window.GiraTrailer && window.GiraTrailer.onPlayerError) {
+                    window.GiraTrailer.onPlayerError(e ? e.data : -1);
+                }
+            }
+        }
+    });
+}
+function loadVideoById(id) {
+    if (!/^[A-Za-z0-9_\-]{11}$/.test(id)) return;
+    if (player && player.loadVideoById) {
+        player.loadVideoById(id);
+    } else {
+        pendingId = id;
+    }
+}
+</script>
+</head>
+<body>
+<div id="player"></div>
+</body>
+</html>

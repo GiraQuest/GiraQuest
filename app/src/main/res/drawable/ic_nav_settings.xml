@@ -1,0 +1,7 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <!-- Engranaje violeta (pestaña Ajustes) -->
+    <path android:fillColor="#B79CFF"
+        android:pathData="M12,8.5A3.5,3.5 0 1,0 12,15.5 3.5,3.5 0 0,0 12,8.5zM19.4,13.6l1.9,1.5 -1.9,3.3 -2.2,-0.9a7.6,7.6 0 0,1 -1.9,1.1L15,20.9h-3.8l-0.3,-2.3a7.6,7.6 0 0,1 -1.9,-1.1l-2.2,0.9 -1.9,-3.3 1.9,-1.5a7.9,7.9 0 0,1 0,-2.2L4.9,9.9l1.9,-3.3 2.2,0.9a7.6,7.6 0 0,1 1.9,-1.1L11.2,4h3.8l0.3,2.4a7.6,7.6 0 0,1 1.9,1.1l2.2,-0.9 1.9,3.3 -1.9,1.5a7.9,7.9 0 0,1 0,2.2z"/>
+</vector>
