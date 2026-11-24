@@ -16,11 +16,10 @@ android {
         applicationId = "es.girarkas.giraquest"
         minSdk = 30
         targetSdk = 32
-        versionCode = 49
-        versionName = "0.1.48"
-        // BuildConfig.VRP_API_KEY (cabecera X-API-Key para repositorios
-        // que la requieran). En Gradle va vacía; el build manual la
-        // inyecta desde un archivo local (.api-key, nunca se publica).
+        versionCode = 54
+        versionName = "0.1.53"
+        // v0.1.9: BuildConfig.VRP_API_KEY (cabecera X-API-Key del mirror).
+        // En Gradle va vacía; el build manual la inyecta desde .api-key.
         buildConfigField("String", "VRP_API_KEY", "\"\"")
     }
 

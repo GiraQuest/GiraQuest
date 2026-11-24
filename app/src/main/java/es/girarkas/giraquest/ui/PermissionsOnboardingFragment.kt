@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -135,6 +136,9 @@ class PermissionsOnboardingFragment : Fragment() {
         savedInstanceState?.getStringArrayList(KEY_VISITED)
             ?.mapNotNull { runCatching { Step.valueOf(it) }.getOrNull() }
             ?.let { visited += it }
+
+        val langSpinner = view.findViewById<Spinner>(R.id.spinner_onboarding_language)
+        LocaleHelper.bindSpinner(langSpinner, requireActivity())
 
         rowFiles = view.findViewById(R.id.row_onboarding_files)
         rowInstall = view.findViewById(R.id.row_onboarding_install)

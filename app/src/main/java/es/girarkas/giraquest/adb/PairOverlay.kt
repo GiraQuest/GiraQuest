@@ -76,7 +76,7 @@ object PairOverlay {
         }
         val metrics = appContext.resources.displayMetrics
         val width = (metrics.widthPixels - (48 * metrics.density).toInt())
-            .coerceAtLeast(280)
+            .coerceIn(280, (460 * metrics.density).toInt())
         val lp = WindowManager.LayoutParams(
             width,
             WindowManager.LayoutParams.WRAP_CONTENT,

@@ -12,12 +12,15 @@ import io.github.muntashirakon.adb.AdbStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.PrivateKey
 import java.security.cert.Certificate
+import java.text.SimpleDateFormat
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -1884,6 +1887,186 @@ class GiraAdbManager private constructor(
     suspend fun isWirelessDebuggingOn(): Boolean {
         val res = execQuick("settings get global adb_wifi_enabled")
         return res.output.trim() == "1"
+    }
+
+    // ------------------------------------------------------------------
+    // Explorador sin límites vía shell ADB (UID 2000, v0.1.50)
+    // ------------------------------------------------------------------
+
+    data class AdbFileEntry(
+        val name: String,
+        val fullPath: String,
+        val isDirectory: Boolean,
+        val size: Long,
+        val lastModified: Long,
+    )
+
+    fun clearAuthRejection() {
+        authRejected = false
+        authRejectedReason = null
+    }
+
+    /**
+     * Conecta bajo demanda para el explorador de archivos si ya hubo un
+     * emparejamiento previo (TLS o TCP). Nunca bloquea si la clave fue
+     * rechazada o si nunca se emparejó todavía.
+     */
+    suspend fun ensureConnectedForExplorer(allowMdnsDiscovery: Boolean = true): Boolean {
+        if (connectHung || authRejected) return false
+        if (!isTcpMode && !settings.adbPaired && settings.adbConnectPort <= 0) return false
+        if (isTcpMode && !settings.adbTcpAuthorized) return false
+
+        if (connected && probe()) return true
+        disconnect()
+        if (connectSaved() && probe()) return true
+
+        if (!isTcpMode && settings.writeSecureSettingsGranted && !isWirelessDebuggingOnDirect()) {
+            if (enableWirelessDebuggingDirect()) {
+                delay(1_500)
+                if (connectSaved() && probe()) return true
+            }
+        }
+        if (!allowMdnsDiscovery) return false
+
+        val ep = withTimeoutOrNull(4_500) {
+            if (isTcpMode) AdbPortDiscovery.discoverTcp(appContext, 4_000)
+            else AdbPortDiscovery.discoverConnect(appContext, 4_000)
+        } ?: return false
+
+        disconnect()
+        val ok = if (isTcpMode) connectTcp(ep.host, ep.port) else connectTo(ep.host, ep.port)
+        return ok && probe()
+    }
+
+    suspend fun listDirShell(dirPath: String): List<AdbFileEntry>? {
+        if (!connected && !ensureConnectedForExplorer()) return null
+        val candidates = if (dirPath.startsWith("/storage/emulated/0")) {
+            listOf(dirPath, "/sdcard" + dirPath.removePrefix("/storage/emulated/0"))
+        } else {
+            listOf(dirPath)
+        }
+        for (cand in candidates) {
+            val q = shDq(cand.trimEnd('/').ifEmpty { "/" })
+            val cmd = "d=\"$q\"; if [ ! -d \"\$d\" ]; then echo \"__NOT_DIR__\"; exit 1; fi; echo \"__OK__\"; ls -lAn \"\$d\""
+            val res = execQuick(cmd)
+            val lines = res.output.lines()
+            val okIdx = lines.indexOfFirst { it.trim() == "__OK__" }
+            if (okIdx < 0) continue
+
+            val dateFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+            val lineRegex = Regex(
+                "^([dl\\-cbps])\\S+\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2})\\s+(.+)$"
+            )
+            val base = dirPath.trimEnd('/')
+            val out = mutableListOf<AdbFileEntry>()
+            for (i in (okIdx + 1) until lines.size) {
+                val line = lines[i].trimEnd()
+                if (line.isBlank() || line.startsWith("total ")) continue
+                val m = lineRegex.matchEntire(line) ?: continue
+                val typeChar = m.groupValues[1]
+                val size = m.groupValues[2].toLongOrNull() ?: 0L
+                val dateStr = m.groupValues[3]
+                val rawName = m.groupValues[4]
+                val name = if (typeChar == "l") rawName.substringBefore(" -> ") else rawName
+                if (name == "." || name == "..") continue
+                val mtime = try {
+                    dateFmt.parse(dateStr)?.time ?: 0L
+                } catch (_: Exception) {
+                    0L
+                }
+                val isDir = typeChar == "d" || typeChar == "l"
+                out += AdbFileEntry(
+                    name = name,
+                    fullPath = if (base.isEmpty()) "/$name" else "$base/$name",
+                    isDirectory = isDir,
+                    size = size,
+                    lastModified = mtime,
+                )
+            }
+            return out
+        }
+        return null
+    }
+
+    suspend fun mkdirShell(dirPath: String): Boolean {
+        if (!connected && !ensureConnectedForExplorer()) return false
+        val res = execQuick("mkdir -p \"${shDq(dirPath)}\" && echo \"__OK__\"")
+        return !res.isError && res.output.lines().any { it.trim() == "__OK__" }
+    }
+
+    suspend fun existsShell(path: String): Boolean {
+        if (!connected && !ensureConnectedForExplorer()) return false
+        val res = execQuick("[ -e \"${shDq(path)}\" ] && echo \"__YES__\"")
+        return !res.isError && res.output.lines().any { it.trim() == "__YES__" }
+    }
+
+    suspend fun uniqueDestShell(dirPath: String, name: String): String {
+        val baseDir = dirPath.trimEnd('/')
+        var candidate = "$baseDir/$name"
+        if (!existsShell(candidate)) return name
+        val dot = name.lastIndexOf('.')
+        val stem = if (dot > 0) name.substring(0, dot) else name
+        val ext = if (dot > 0) name.substring(dot) else ""
+        var i = 2
+        while (i <= 200) {
+            val candName = "$stem ($i)$ext"
+            candidate = "$baseDir/$candName"
+            if (!existsShell(candidate)) return candName
+            i++
+        }
+        return "${stem}_${System.currentTimeMillis()}$ext"
+    }
+
+    suspend fun copyShell(srcPath: String, destDirPath: String, destName: String): Boolean {
+        if (!connected && !ensureConnectedForExplorer()) return false
+        val destPath = "${destDirPath.trimEnd('/')}/$destName"
+        val res = exec(
+            "mkdir -p \"${shDq(destDirPath)}\" && cp -r \"${shDq(srcPath)}\" \"${shDq(destPath)}\" && echo \"__OK__\"",
+            timeoutMs = 300_000,
+        )
+        return !res.isError && res.output.lines().any { it.trim() == "__OK__" }
+    }
+
+    suspend fun moveShell(srcPath: String, destDirPath: String, destName: String): Boolean {
+        if (!connected && !ensureConnectedForExplorer()) return false
+        val destPath = "${destDirPath.trimEnd('/')}/$destName"
+        val res = exec(
+            "mkdir -p \"${shDq(destDirPath)}\" && (mv \"${shDq(srcPath)}\" \"${shDq(destPath)}\" || (cp -r \"${shDq(srcPath)}\" \"${shDq(destPath)}\" && rm -rf \"${shDq(srcPath)}\")) && echo \"__OK__\"",
+            timeoutMs = 300_000,
+        )
+        return !res.isError && res.output.lines().any { it.trim() == "__OK__" }
+    }
+
+    suspend fun renameShell(srcPath: String, newPath: String): Boolean {
+        if (!connected && !ensureConnectedForExplorer()) return false
+        val res = execQuick("mv \"${shDq(srcPath)}\" \"${shDq(newPath)}\" && echo \"__OK__\"")
+        return !res.isError && res.output.lines().any { it.trim() == "__OK__" }
+    }
+
+    suspend fun deleteShell(targetPath: String): Boolean {
+        val norm = targetPath.trim().trimEnd('/')
+        val protectedRoots = setOf(
+            "", "/sdcard", "/storage", "/storage/emulated",
+            "/storage/emulated/0", "/storage/emulated/0/Android", "/sdcard/Android"
+        )
+        if (norm in protectedRoots) return false
+        if (!connected && !ensureConnectedForExplorer()) return false
+        val res = execQuick("rm -rf \"${shDq(targetPath)}\" && echo \"__OK__\"")
+        return !res.isError && res.output.lines().any { it.trim() == "__OK__" }
+    }
+
+    suspend fun stageRestrictedFileToCache(srcPath: String, cacheFile: File): Boolean {
+        if (!connected && !ensureConnectedForExplorer()) return false
+        withContext(Dispatchers.IO) {
+            cacheFile.parentFile?.mkdirs()
+            cacheFile.delete()
+        }
+        val res = exec(
+            "cp \"${shDq(srcPath)}\" \"${shDq(cacheFile.absolutePath)}\" && echo \"__OK__\"",
+            timeoutMs = 180_000,
+        )
+        if (res.isError || !res.output.lines().any { it.trim() == "__OK__" }) return false
+        return withContext(Dispatchers.IO) { cacheFile.exists() && cacheFile.isFile }
     }
 
     data class ShellResult(val output: String, val error: String, val code: Int) {

@@ -78,7 +78,7 @@ class InstalledFragment : Fragment() {
                         getString(
                             R.string.uninstall_done,
                             if (pendingUninstallDeleteDownloads && freed > 0) {
-                                "$label (${RepoAdapter.formatSize(freed)} de descargas borrados)"
+                                getString(R.string.uninstall_with_freed, label, RepoAdapter.formatSize(freed))
                             } else {
                                 label
                             }
@@ -97,7 +97,7 @@ class InstalledFragment : Fragment() {
                     if (result.resultCode == Activity.RESULT_CANCELED) {
                         getString(R.string.uninstall_cancelled)
                     } else {
-                        getString(R.string.uninstall_failed, "código ${result.resultCode}")
+                        getString(R.string.uninstall_failed, getString(R.string.uninstall_code_fmt, result.resultCode))
                     },
                     Toast.LENGTH_LONG
                 ).show()
@@ -177,7 +177,7 @@ class InstalledFragment : Fragment() {
                     when (state) {
                         is ObbUiState.Pending -> state.reason
                         is ObbUiState.Failed -> state.reason
-                        is ObbUiState.NotGranted -> "falta el permiso de acceso a archivos"
+                        is ObbUiState.NotGranted -> getString(R.string.obb_missing_files_reason)
                         else -> "?"
                     }
                 ),

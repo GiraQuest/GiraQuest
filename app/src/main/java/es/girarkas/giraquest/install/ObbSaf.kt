@@ -605,4 +605,251 @@ object ObbSaf {
             "árbol concedido=${if (saved) "SÍ" else "NO"}, " +
             "sonda crear carpeta=$probe, sonda escribir=$probe — $detail"
     }
+
+    // ---------- v0.1.49 / v0.1.53: soporte SAF general / Android/data ----------
+
+    private val ZERO_WIDTH_CHARS = charArrayOf('\u200D', '\u200B', '\u200C', '\uFEFF')
+
+    fun initialDataTreeUri(): Uri = Uri.Builder()
+        .scheme("content")
+        .authority(AUTHORITY)
+        .appendPath("tree")
+        .appendPath("primary:Android/data")
+        .appendPath("document")
+        .appendPath("primary:Android/data")
+        .build()
+
+    fun initialPackageDataTreeUri(packageName: String): Uri = Uri.Builder()
+        .scheme("content")
+        .authority(AUTHORITY)
+        .appendPath("tree")
+        .appendPath("primary:Android/data/$packageName")
+        .appendPath("document")
+        .appendPath("primary:Android/data/$packageName")
+        .build()
+
+    /** URI con carácter de ancho cero (\u200B) en "A\u200Bndroid/data" para
+     *  esquivar el filtro PATTERN_RESTRICTED_INITIAL_PATH de DocumentsUI en
+     *  Android 13/14. */
+    fun initialDataBypassTreeUri(subRel: String? = null): Uri {
+        val cleanSub = subRel?.trim('/')?.filterNot { it in ZERO_WIDTH_CHARS }.orEmpty()
+        val docRel = if (cleanSub.isEmpty()) "primary:A\u200Bndroid/data"
+        else "primary:A\u200Bndroid/data/$cleanSub"
+        return Uri.Builder()
+            .scheme("content")
+            .authority(AUTHORITY)
+            .appendPath("tree")
+            .appendPath("primary:A\u200Bndroid/data")
+            .appendPath("document")
+            .appendPath(docRel)
+            .build()
+    }
+
+    fun initialObbBypassTreeUri(subRel: String? = null): Uri {
+        val cleanSub = subRel?.trim('/')?.filterNot { it in ZERO_WIDTH_CHARS }.orEmpty()
+        val docRel = if (cleanSub.isEmpty()) "primary:A\u200Bndroid/obb"
+        else "primary:A\u200Bndroid/obb/$cleanSub"
+        return Uri.Builder()
+            .scheme("content")
+            .authority(AUTHORITY)
+            .appendPath("tree")
+            .appendPath("primary:A\u200Bndroid/obb")
+            .appendPath("document")
+            .appendPath(docRel)
+            .build()
+    }
+
+    fun openDocumentTreeIntent(initialUri: Uri?): Intent =
+        Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+            )
+            if (initialUri != null) {
+                putExtra(DocumentsContract.EXTRA_INITIAL_URI, initialUri)
+            }
+        }
+
+    /** Guarda un árbol SAF concedido desde el explorador (p. ej. Android/data
+     *  o Android/data/<paquete>) sin tocar un obbSafTreeUri ya existente. */
+    fun saveExplorerSafTree(context: Context, uri: Uri): Boolean {
+        val rwFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val persisted = try {
+            context.contentResolver.takePersistableUriPermission(uri, rwFlags)
+            true
+        } catch (_: Exception) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+        if (!persisted) return false
+        val settings = SettingsStore(context)
+        settings.addSafTreeUri(uri.toString())
+        if (settings.obbSafTreeUri.isBlank()) {
+            val kind = detectKind(uri)
+            if (kind == "obb" || kind == "root") {
+                settings.obbSafTreeUri = uri.toString()
+                settings.obbSafTreeKind = kind
+            }
+        }
+        return true
+    }
+
+    private fun allExplorerTreeUris(context: Context): List<Uri> {
+        val settings = SettingsStore(context)
+        val ordered = LinkedHashSet<String>()
+        for (u in settings.safTreeUris) {
+            if (u.isNotBlank()) ordered.add(u)
+        }
+        val obb = settings.obbSafTreeUri
+        if (obb.isNotBlank()) ordered.add(obb)
+        return ordered.mapNotNull { runCatching { Uri.parse(it) }.getOrNull() }
+    }
+
+    private fun treeBaseRelPath(uri: Uri): String? {
+        val rawDocId = try {
+            DocumentsContract.getTreeDocumentId(uri)
+        } catch (_: Exception) {
+            return null
+        }
+        val docId = rawDocId.filterNot { it in ZERO_WIDTH_CHARS }
+        return when {
+            docId == "primary" || docId == "primary:" -> ""
+            docId.startsWith("primary:") -> docId.removePrefix("primary:").trim('/')
+            else -> null
+        }
+    }
+
+    private fun dirRelPath(dir: File): String? {
+        val raw = try {
+            dir.relativeTo(Environment.getExternalStorageDirectory()).path
+        } catch (_: Exception) {
+            return null
+        }
+        val norm = raw.replace(File.separator, "/").trim('/').filterNot { it in ZERO_WIDTH_CHARS }
+        return if (norm == ".") "" else norm
+    }
+
+    /** Devuelve true si existe un árbol SAF concedido que cubra `dir`
+     *  directamente (él mismo o un ancestro suyo, p. ej. raíz o Android/data). */
+    fun hasCoveringTree(context: Context, dir: File): Boolean {
+        val rel = dirRelPath(dir) ?: return false
+        for (uri in allExplorerTreeUris(context)) {
+            val base = treeBaseRelPath(uri) ?: continue
+            if (base.isEmpty() || rel == base || rel.startsWith("$base/")) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /** Localiza el DocumentFile de `dir` buscando en todos los árboles SAF
+     *  concedidos (prioriza el árbol más específico). */
+    fun findDirNode(context: Context, dir: File): DocumentFile? {
+        val rel = dirRelPath(dir) ?: return null
+        val candidates = allExplorerTreeUris(context)
+            .mapNotNull { uri -> treeBaseRelPath(uri)?.let { base -> uri to base } }
+            .filter { (_, base) -> base.isEmpty() || rel == base || rel.startsWith("$base/") }
+            .sortedByDescending { (_, base) -> base.length }
+
+        for ((uri, base) in candidates) {
+            val root = try {
+                DocumentFile.fromTreeUri(context, uri)
+            } catch (_: Exception) {
+                null
+            } ?: continue
+            val subRel = when {
+                base.isEmpty() -> rel
+                rel == base -> ""
+                else -> rel.removePrefix("$base/")
+            }
+            val node = if (subRel.isEmpty()) root
+            else navigate(root, subRel.replace("/", File.separator))
+            if (node != null && node.isDirectory) return node
+        }
+        return null
+    }
+
+    /** Lista `dir` usando cualquier árbol SAF concedido. Si no hay árbol
+     *  padre que cubra `dir`, pero sí árboles hijos directos concedidos
+     *  (p. ej. Android/data/<paquete>), devuelve esas carpetas para poder
+     *  entrar en ellas. */
+    fun listDirAny(context: Context, dir: File): List<DocumentFile>? {
+        val node = findDirNode(context, dir)
+        if (node != null) {
+            return try {
+                node.listFiles().toList()
+            } catch (_: Exception) {
+                null
+            }
+        }
+        val rel = dirRelPath(dir) ?: return null
+        val prefix = if (rel.isEmpty()) "" else "$rel/"
+        val children = mutableListOf<DocumentFile>()
+        val seenNames = HashSet<String>()
+        for (uri in allExplorerTreeUris(context)) {
+            val base = treeBaseRelPath(uri) ?: continue
+            if (prefix.isEmpty() && base.isNotEmpty() && !base.contains('/')) {
+                val doc = runCatching { DocumentFile.fromTreeUri(context, uri) }.getOrNull()
+                val name = base
+                if (doc != null && seenNames.add(name)) children += doc
+            } else if (prefix.isNotEmpty() && base.startsWith(prefix)) {
+                val rest = base.removePrefix(prefix)
+                if (rest.isNotEmpty() && !rest.contains('/')) {
+                    val doc = runCatching { DocumentFile.fromTreeUri(context, uri) }.getOrNull()
+                    if (doc != null && seenNames.add(rest)) children += doc
+                }
+            }
+        }
+        return if (children.isNotEmpty()) children else null
+    }
+
+    fun findChildNode(context: Context, dir: File, name: String): DocumentFile? =
+        try {
+            findDirNode(context, dir)?.findFile(name)
+        } catch (_: Exception) {
+            null
+        }
+
+    fun copyFileToSafDir(context: Context, destDir: File, src: File): SafCopyResult {
+        val node = findDirNode(context, destDir)
+            ?: return SafCopyResult(false, -1, "sin permiso SAF en ${destDir.name}")
+        return copyFileToDir(context, node, src)
+    }
+
+    fun copyDirToSafDir(context: Context, destParentDir: File, srcDir: File): SafCopyResult {
+        val parentNode = findDirNode(context, destParentDir)
+            ?: return SafCopyResult(false, -1, "sin permiso SAF en ${destParentDir.name}")
+        val targetRoot = try {
+            parentNode.findFile(srcDir.name) ?: parentNode.createDirectory(srcDir.name)
+        } catch (_: Exception) {
+            null
+        } ?: return SafCopyResult(false, -1, "no se pudo crear ${srcDir.name} en SAF")
+        val files = try {
+            srcDir.walkTopDown().filter { it.isFile }.toList()
+        } catch (e: Exception) {
+            return SafCopyResult(false, -1, e.message ?: e.javaClass.simpleName)
+        }
+        var total = 0L
+        for (f in files) {
+            val rel = runCatching { f.relativeTo(srcDir).path }.getOrDefault(f.name)
+            val parentRel = rel.substringBeforeLast(File.separator, "")
+            val subNode = if (parentRel.isEmpty()) targetRoot else navigateOrCreate(targetRoot, parentRel)
+            if (subNode == null) {
+                return SafCopyResult(false, total, "no se pudo crear subcarpeta $parentRel")
+            }
+            val r = copyFileToDir(context, subNode, f)
+            if (!r.ok) return r
+            total += r.bytes
+        }
+        return SafCopyResult(true, total, "copiado por SAF")
+    }
 }

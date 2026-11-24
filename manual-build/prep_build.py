@@ -6,12 +6,10 @@
 """
 import json, os, re, shutil, subprocess, sys, zipfile
 
-MB = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(MB)
+MB = os.path.expanduser("~/workspace/giraquest-port/manual-build")
 WORK = os.path.join(MB, "work")
 ART = os.path.join(MB, "deps", "artifacts")
-APP = os.path.join(ROOT, "app", "src", "main")
-SDK = os.environ.get("ANDROID_SDK_ROOT") or os.environ.get("ANDROID_HOME") or os.path.expanduser("~/Android/Sdk")
+APP = os.path.expanduser("~/workspace/giraquest-port/quest-app/app/src/main")
 os.makedirs(WORK, exist_ok=True)
 
 resolved = json.load(open(os.path.join(MB, "deps", "resolved.json")))
@@ -123,8 +121,8 @@ print(f"jni arm64-v8a: {[j[0] for j in jni_files]}")
 
 # v0.1.12: binarios propios en src/main/jniLibs (AGP los recoge solo en
 # Gradle; el build manual los suma aqui). Ej.: 7zzs oficial de 7-zip
-# (Linux ARM64, estatico) como lib/arm64-v8a/lib7zzs.so para extraer
-# archivos 7z con contrasena (commons-compress no abre algunos).
+# (Linux ARM64, estatico) como lib/arm64-v8a/lib7zzs.so para extraer los
+# 7z cifrados del repo (commons-compress no abre los del servidor).
 jni_libs_dir = os.path.join(APP, "jniLibs")
 if os.path.isdir(jni_libs_dir):
     for abi in sorted(os.listdir(jni_libs_dir)):
@@ -146,7 +144,7 @@ with open(os.path.join(WORK, "compile_jars.txt"), "w") as f:
     # ordenados por prioridad (stdlib y okio-jvm primero)
     for coord, path in sorted(jar_files, key=lambda t: prio(t[0])):
         f.write(path + "\n")
-    f.write(os.path.join(SDK, "platforms", "android-34", "android.jar") + "\n")
+    f.write(os.path.expanduser("~/Android/Sdk/platforms/android-34/android.jar") + "\n")
 with open(os.path.join(WORK, "lib_packages.txt"), "w") as f:
     f.write(":".join(sorted(set(lib_packages))) + "\n")
 with open(os.path.join(WORK, "jni_files.txt"), "w") as f:

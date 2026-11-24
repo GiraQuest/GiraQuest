@@ -25,7 +25,6 @@ import es.girarkas.giraquest.data.SettingsStore
 object InstallNotifier {
 
     private const val CHANNEL_ID = "giraquest_install"
-    private const val CHANNEL_NAME = "Instalaciones completas"
     private const val NOTIF_ID_BASE = 10_000
 
     fun ensureChannel(context: Context) {
@@ -35,10 +34,10 @@ object InstallNotifier {
             if (nm.getNotificationChannel(CHANNEL_ID) != null) return
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                CHANNEL_NAME,
+                context.getString(R.string.notif_install_channel),
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Avisa cuando un juego termina de instalarse por completo (APK + OBB)."
+                description = context.getString(R.string.notif_install_channel_desc)
                 setSound(null, null)
                 enableVibration(false)
             }
@@ -48,15 +47,6 @@ object InstallNotifier {
         }
     }
 
-    /** "BulletStorm VR instalado por completo: APK + 3 OBB (9,68 GB)".
-     *
-     *  v0.1.33: UNA SOLA VEZ por (paquete, versión). La v0.1.32 avisaba
-     *  ~30 veces por juego (el temporizador re-completaba cada minuto
-     *  un juego ya completo y cada vez notificaba): la clave persistida
-     *  "$paquete@$versión:complete" impide repetirlo, se avise desde
-     *  donde se avise (instalación inmediata, temporizador o reintento).
-     *  Al desinstalar se borran las claves del paquete (SettingsStore),
-     *  así que una reinstalación de la misma versión vuelve a avisar. */
     fun notifyComplete(context: Context, packageName: String, versionCode: Long, gameName: String, detail: String) {
         val settings = SettingsStore(context)
         if (settings.wasInstallNotified(packageName, versionCode, "complete")) {
@@ -64,7 +54,12 @@ object InstallNotifier {
             return
         }
         settings.markInstallNotified(packageName, versionCode, "complete")
-        post(context, "install_complete:$gameName", "$gameName instalado por completo", detail)
+        post(
+            context,
+            "install_complete:$gameName",
+            context.getString(R.string.notif_install_complete_title, gameName),
+            detail
+        )
     }
 
     /** La cadena terminó con el OBB fallido o pendiente sin remedio.
@@ -79,8 +74,8 @@ object InstallNotifier {
         post(
             context,
             "install_obb_failed:$gameName",
-            "$gameName: OBB sin copiar",
-            "APK instalada, pero el OBB no se copió: $reason. Reinténtalo desde la ficha del juego."
+            context.getString(R.string.notif_obb_missing_title, gameName),
+            context.getString(R.string.notif_obb_missing_body, reason)
         )
     }
 

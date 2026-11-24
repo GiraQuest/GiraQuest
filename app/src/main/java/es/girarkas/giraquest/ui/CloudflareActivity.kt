@@ -2,6 +2,7 @@ package es.girarkas.giraquest.ui
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
@@ -27,7 +28,7 @@ import kotlin.coroutines.resume
 /**
  * Pase de Cloudflare con el motor real de Chrome del móvil (v0.1.10).
  *
- * El servidor de algunos repositorios devuelve HTTP 403 a
+ * El servidor del repositorio público devuelve HTTP 403 a
  * OkHttp/Conscrypt aunque la red sea la misma que la del PC (donde rclone
  * sí pasa): Cloudflare rechaza al cliente por su huella, no por la IP.
  * Un WebView es un Chrome de verdad: ejecuta el JavaScript del challenge
@@ -58,8 +59,12 @@ import kotlin.coroutines.resume
  */
 class CloudflareActivity : AppCompatActivity() {
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrap(newBase))
+    }
+
     companion object {
-        /** URL a cargar (la raíz del repositorio configurado). */
+        /** URL a cargar (la raíz del mirror). */
         const val EXTRA_URL = "url"
         /** Motivo del fallo cuando el resultado es RESULT_CANCELED. */
         const val EXTRA_REASON = "reason"

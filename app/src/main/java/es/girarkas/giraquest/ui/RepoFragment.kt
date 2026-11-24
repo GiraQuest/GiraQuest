@@ -896,7 +896,7 @@ class RepoFragment : Fragment() {
             if (completed.isNotEmpty() && isAdded && view != null) {
                 Toast.makeText(
                     requireContext(),
-                    "OBB completado: ${completed.joinToString(", ")}.",
+                    getString(R.string.obb_completed_toast, completed.joinToString(", ")),
                     Toast.LENGTH_LONG
                 ).show()
                 loadRepos()
@@ -1063,8 +1063,7 @@ class RepoFragment : Fragment() {
         // consulta bajo demanda (listado + HEADs, con caché); mientras
         // tanto el diálogo ya está abierto con "Consultando tamaño…".
         val initialSize = if (entry.vrpHash != null) {
-            getString(R.string.detail_size_querying)
-                .removePrefix("Tamaño de descarga: ")
+            getString(R.string.confirm_size_querying)
         } else {
             RepoAdapter.formatSize(entry.apkSize)
         }

@@ -132,7 +132,7 @@ class GameDetailDialog : DialogFragment() {
                         getString(
                             R.string.uninstall_done,
                             if (uninstallDeleteDownloads && freed > 0) {
-                                "${entry.displayName} (${RepoAdapter.formatSize(freed)} de descargas borrados)"
+                                getString(R.string.uninstall_with_freed, entry.displayName, RepoAdapter.formatSize(freed))
                             } else {
                                 entry.displayName
                             }
@@ -153,7 +153,7 @@ class GameDetailDialog : DialogFragment() {
                     if (result.resultCode == Activity.RESULT_CANCELED) {
                         getString(R.string.uninstall_cancelled)
                     } else {
-                        getString(R.string.uninstall_failed, "código ${result.resultCode}")
+                        getString(R.string.uninstall_failed, getString(R.string.uninstall_code_fmt, result.resultCode))
                     },
                     Toast.LENGTH_LONG
                 ).show()
@@ -493,6 +493,8 @@ class GameDetailDialog : DialogFragment() {
                 }
                 obbState is ObbUiState.Failed &&
                     (GiraQuestApp.needsMountRestart(requireContext()) ||
+                        !Environment.isExternalStorageManager() ||
+                        !requireContext().packageManager.canRequestPackageInstalls() ||
                         "EACCES" in obbState.reason || "sin permiso" in obbState.reason ||
                         "reiniciar" in obbState.reason) -> {
                     btnObbSettings.visibility = View.VISIBLE
@@ -564,10 +566,10 @@ class GameDetailDialog : DialogFragment() {
                     else getString(
                         R.string.obb_retried_fail,
                         when (state) {
-                            is ObbUiState.Pending -> state.reason
-                            is ObbUiState.Failed -> state.reason
-                            is ObbUiState.NotGranted -> "falta el permiso de acceso a archivos"
-                            else -> "?"
+                    is ObbUiState.Pending -> state.reason
+                    is ObbUiState.Failed -> state.reason
+                    is ObbUiState.NotGranted -> getString(R.string.obb_missing_files_reason)
+                    else -> "?"
                         }
                     ),
                     Toast.LENGTH_LONG

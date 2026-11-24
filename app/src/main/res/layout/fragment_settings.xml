@@ -28,7 +28,23 @@
             style="@style/GiraQuestSectionTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="14dp"
+            android:text="@string/language_section_title" />
+        <Spinner
+            android:id="@+id/spinner_settings_language"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_card"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:spinnerMode="dropdown" />
+
+        <TextView
+            style="@style/GiraQuestSectionTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:text="@string/download_folder" />
         <EditText
             android:id="@+id/et_download_folder"

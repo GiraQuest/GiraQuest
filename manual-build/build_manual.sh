@@ -1,22 +1,21 @@
 #!/bin/bash
-# Build manual de GiraQuest v0.1.48 sin Gradle (aapt2 + kotlinc + javac + d8 + apksigner).
+# Build manual de GiraQuest v0.1.29 sin Gradle (aapt2 + kotlinc + javac + d8 + apksigner).
 # Uso: bash build_manual.sh [paso]   (paso: all|res|kotlinc|dex|apk|verify)
-# Requiere: Android SDK (ANDROID_SDK_ROOT o ~/Android/Sdk), JDK 17
-# (JAVA_HOME) y kotlinc (KOTLINC_HOME o ~/kotlin/kotlinc).
-# BuildConfig.VRP_API_KEY se inyecta en tiempo de compilación desde
-# manual-build/.api-key (clave opcional para repositorios que la exijan).
+# v0.1.9: BuildConfig.VRP_API_KEY se inyecta desde
+# ~/workspace/giraquest-port/.api-key (clave X-API-Key del mirror, como
+# el PC: incrustada en el binario oficial, no está en el código fuente).
 # Si el archivo no existe o no es válido, la APK se compila con la clave
-# vacía. El archivo nunca se publica: está en .gitignore.
+# vacía (el repo puede devolver 403). El archivo nunca va a Drive ni al
+# zip de fuentes: solo vive aquí y dentro de la APK.
 set -u
-export JAVA_HOME=${JAVA_HOME:-$HOME/jdk/current}
+export JAVA_HOME=$HOME/jdk/current
 export PATH=$JAVA_HOME/bin:$PATH
-SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Android/Sdk}}
+SDK=$HOME/Android/Sdk
 BT=$SDK/build-tools/34.0.0
-D8BT=$SDK/build-tools/35.0.0
+D8BT=$SDK/build-tools/34.0.0
 ANDROID_JAR=$SDK/platforms/android-34/android.jar
-MB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(dirname "$MB")"
-APP=$ROOT/app
+MB=$HOME/workspace/giraquest-port/manual-build
+APP=$HOME/workspace/giraquest-port/quest-app/app
 WORK=$MB/work
 GEN=$WORK/gen
 STEP=${1:-all}
@@ -38,11 +37,12 @@ open(dst, "w", encoding="utf-8").write(data)
 print(open(dst, encoding="utf-8").read()[:600])
 EOF
   mkdir -p $WORK/gen
-  # Inyectar la clave opcional X-API-Key en BuildConfig (se lee de
-  # manual-build/.api-key, modo 600; nunca se imprime ni se publica).
-  # Sin archivo, clave vacía.
+  # v0.1.9: inyectar la clave X-API-Key del mirror en BuildConfig (el PC
+  # la incrusta en el binario oficial en tiempo de compilación; aquí se
+  # lee de ~/workspace/giraquest-port/.api-key, modo 600, nunca se
+  # imprime ni se sube a Drive). Sin archivo, clave vacía.
   VRP_API_KEY=""
-  API_KEY_FILE=$MB/.api-key
+  API_KEY_FILE=$HOME/workspace/giraquest-port/.api-key
   if [ -f "$API_KEY_FILE" ]; then
     K=$(cat "$API_KEY_FILE")
     case "$K" in
@@ -58,8 +58,8 @@ public final class BuildConfig {
     public static final boolean DEBUG = true;
     public static final String APPLICATION_ID = "es.girarkas.giraquest";
     public static final String BUILD_TYPE = "debug";
-    public static final int VERSION_CODE = 49;
-    public static final String VERSION_NAME = "0.1.48";
+    public static final int VERSION_CODE = 54;
+    public static final String VERSION_NAME = "0.1.53";
     public static final String VRP_API_KEY = "$VRP_API_KEY";
 }
 EOF
@@ -88,7 +88,7 @@ if [ "$STEP" = all ] || [ "$STEP" = res ]; then
     --extra-packages "$EXTRA" \
     --auto-add-overlay \
     --min-sdk-version 30 --target-sdk-version 32 \
-    --version-code 49 --version-name 0.1.48 \
+    --version-code 54 --version-name 0.1.53 \
     $WORK/compiled/*.zip || exit 1
   say "R.java generados:"
   find $GEN -name '*.java' | sort
@@ -108,7 +108,7 @@ if [ "$STEP" = all ] || [ "$STEP" = kotlinc ]; then
   # v0.1.21: -J-Xmx3g — el heap por defecto de kotlinc (1/4 de la RAM de
   # la VM, ~1,5 GB) ya no basta para el linker IR con 70 fuentes + AARs
   # (OutOfMemoryError en generateUnboundSymbolsAsDependencies).
-  ${KOTLINC_HOME:-$HOME/kotlin/kotlinc}/bin/kotlinc -J-Xmx1300m -no-stdlib -jvm-target 1.8 \
+  $HOME/kotlin/kotlinc/bin/kotlinc -J-Xmx1300m -no-stdlib -jvm-target 1.8 \
     -cp "$CP" -d $WORK/classes @${WORK}/sources.txt 2>&1 | tee $WORK/kotlinc.log
   test ${PIPESTATUS[0]} -eq 0 || { echo "KOTLINC FALLO (ver $WORK/kotlinc.log)"; exit 1; }
   say "javac: R.java de app y librerias + BuildConfig"
@@ -177,14 +177,14 @@ if [ "$STEP" = all ] || [ "$STEP" = apk ]; then
   $BT/apksigner sign --ks ${MB}/debug.keystore --ks-pass pass:android \
     --key-pass pass:android --v1-signing-enabled false \
     --v2-signing-enabled true --v3-signing-enabled true \
-    --out $OUTDIR/giraquest-v0.1.48-debug.apk $WORK/aligned.apk || exit 1
-  say "APK: $OUTDIR/giraquest-v0.1.48-debug.apk"
-  ls -lh $OUTDIR/giraquest-v0.1.48-debug.apk
-  md5sum $OUTDIR/giraquest-v0.1.48-debug.apk
+    --out $OUTDIR/giraquest-v0.1.53-norepo-debug.apk $WORK/aligned.apk || exit 1
+  say "APK: $OUTDIR/giraquest-v0.1.53-norepo-debug.apk"
+  ls -lh $OUTDIR/giraquest-v0.1.53-norepo-debug.apk
+  md5sum $OUTDIR/giraquest-v0.1.53-norepo-debug.apk
 fi
 
 if [ "$STEP" = all ] || [ "$STEP" = verify ]; then
-  APK=$APP/build/outputs/apk/debug/giraquest-v0.1.48-debug.apk
+  APK=$APP/build/outputs/apk/debug/giraquest-v0.1.53-norepo-debug.apk
   say "apksigner verify"
   $BT/apksigner verify -v "$APK" || exit 1
   say "aapt2 dump badging"

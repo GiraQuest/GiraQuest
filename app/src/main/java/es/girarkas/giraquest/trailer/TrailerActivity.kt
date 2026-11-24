@@ -1,6 +1,7 @@
 package es.girarkas.giraquest.trailer
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -18,6 +19,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import es.girarkas.giraquest.R
 import es.girarkas.giraquest.crash.StartupLog
+import es.girarkas.giraquest.ui.LocaleHelper
 
 /**
  * Reproductor de tráilers — WebView con IFrame API de YouTube.
@@ -27,6 +29,10 @@ import es.girarkas.giraquest.crash.StartupLog
  * Referer/Origin HTTPS válido (Error 153 "Video player configuration error").
  */
 class TrailerActivity : AppCompatActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrap(newBase))
+    }
 
     companion object {
         const val EXTRA_VIDEO_ID = "video_id"

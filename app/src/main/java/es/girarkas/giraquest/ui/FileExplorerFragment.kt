@@ -2,14 +2,20 @@ package es.girarkas.giraquest.ui
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.BroadcastReceiver
 import android.content.ClipData
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.StatFs
 import android.provider.MediaStore
+import android.provider.Settings as AndroidSettings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
@@ -34,6 +40,12 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import es.girarkas.giraquest.GiraQuestApp
 import es.girarkas.giraquest.R
+import es.girarkas.giraquest.adb.ACTION_PAIRING_RESULT
+import es.girarkas.giraquest.adb.AdbPortDiscovery
+import es.girarkas.giraquest.adb.EXTRA_PAIRING_OK
+import es.girarkas.giraquest.adb.GiraAdbManager
+import es.girarkas.giraquest.adb.PairOverlay
+import es.girarkas.giraquest.adb.PairingService
 import es.girarkas.giraquest.crash.StartupLog
 import es.girarkas.giraquest.data.SettingsStore
 import es.girarkas.giraquest.install.Installer
@@ -44,14 +56,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import java.io.File
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Un elemento del explorador: archivo/carpeta por File API, o por
- *  SAF (DocumentFile) cuando File.listFiles() devuelve null en
- *  directorios del sistema (Android/obb, Android/data). `file` es null
- *  en los elementos SAF: no hay ruta File utilizable. */
+/** Un elemento del explorador: archivo/carpeta por File API (directo o
+ *  alias FUSE sin restricciones), por ADB shell o por SAF. */
 data class ExplorerItem(
     val name: String,
     val isDirectory: Boolean,
@@ -59,8 +71,12 @@ data class ExplorerItem(
     val lastModified: Long,
     val file: File? = null,
     val docUri: Uri? = null,
+    val viaAdb: Boolean = false,
+    val adbPath: String? = null,
+    val viaAlias: Boolean = false,
 ) {
     val viaSaf: Boolean get() = docUri != null
+    val effectivePath: String? get() = file?.absolutePath ?: adbPath
     val extension: String get() = name.substringAfterLast('.', "")
 }
 
@@ -92,6 +108,30 @@ class FileExplorerFragment : Fragment() {
         /** Ruta con la que abrir (la pone MainActivity.openFileExplorer);
          *  se consume una sola vez. */
         var pendingStartPath: String? = null
+
+        private val DATA_ALIAS_PREFIXES = listOf(
+            "Android/\u200Ddata",
+            "Android/\u200Bdata",
+            "Android/\u200Cdata",
+            "Android/\uFEFFdata",
+            "A\u200Dndroid/data",
+            "A\u200Bndroid/data",
+            "Andr\u200Boid/data",
+            "Andr\u200Doid/data",
+            "Android/d\u200Data",
+            "Android/d\u200Bata",
+            "Android/data\u200B",
+            "Android/data\u200D",
+        )
+
+        private val OBB_ALIAS_PREFIXES = listOf(
+            "Android/\u200Dobb",
+            "Android/\u200Bobb",
+            "A\u200Dndroid/obb",
+            "A\u200Bndroid/obb",
+        )
+
+        private val ZERO_WIDTH_CHARS = charArrayOf('\u200D', '\u200B', '\u200C', '\uFEFF')
     }
 
     private enum class SortMode { NAME, SIZE, DATE }
@@ -109,6 +149,11 @@ class FileExplorerFragment : Fragment() {
     private val selection = mutableSetOf<ExplorerItem>()
     private var pickMode: PickMode? = null
     private var items: List<ExplorerItem> = emptyList()
+    private var rawItems: List<ExplorerItem> = emptyList()
+    private var currentDirViaAdb = false
+    private var workingDataAliasPrefix: String? = null
+    private var workingObbAliasPrefix: String? = null
+    private var listRequestSeq = 0
     /** v0.1.29: mostrar archivos que empiezan por '.' (activa por
      *  defecto al entrar en directorios del sistema). */
     private var showHidden = false
@@ -120,6 +165,143 @@ class FileExplorerFragment : Fragment() {
     /** v0.1.29: motivo por el que el listado falló (null = listado OK
      *  o carpeta realmente vacía). */
     private var listFailedReason: String? = null
+
+    private val safTreeLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { res ->
+        val uri = res.data?.data
+        val ctx = context ?: return@registerForActivityResult
+        if (res.resultCode == Activity.RESULT_OK && uri != null) {
+            val saved = ObbSaf.saveExplorerSafTree(ctx, uri)
+            StartupLog.mark(ctx, "explorador: SAF árbol concedido=$saved uri=$uri")
+            Toast.makeText(
+                ctx,
+                if (saved) R.string.files_data_granted else R.string.files_data_grant_failed,
+                Toast.LENGTH_LONG
+            ).show()
+            refresh()
+        } else {
+            StartupLog.mark(ctx, "explorador: SAF selector cancelado (result=${res.resultCode})")
+        }
+    }
+
+    private val pairingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != ACTION_PAIRING_RESULT) return
+            val ok = intent.getBooleanExtra(EXTRA_PAIRING_OK, false)
+            if (ok && isAdded && view != null) {
+                refresh()
+            }
+        }
+    }
+    private var pairingReceiverRegistered = false
+
+    private fun currentRelPath(dir: File = currentDir): String {
+        val raw = try {
+            dir.relativeTo(rootDir).path
+        } catch (_: Exception) {
+            return ""
+        }
+        val norm = raw.replace(File.separator, "/").trim('/').filterNot { it in ZERO_WIDTH_CHARS }
+        return if (norm == ".") "" else norm
+    }
+
+    private fun isAndroidDataPath(dir: File = currentDir): Boolean {
+        val rel = currentRelPath(dir)
+        return rel == "Android/data" || rel.startsWith("Android/data/")
+    }
+
+    private fun isAndroidObbPath(dir: File = currentDir): Boolean {
+        val rel = currentRelPath(dir)
+        return rel == "Android/obb" || rel.startsWith("Android/obb/")
+    }
+
+    private fun mapDirViaAlias(dir: File, aliasPrefix: String, normalPrefix: String): File {
+        val rel = currentRelPath(dir)
+        val suffix = rel.removePrefix(normalPrefix)
+        return File(rootDir, aliasPrefix + suffix)
+    }
+
+    private fun effectiveIoDir(dir: File): File {
+        if (isAndroidDataPath(dir)) {
+            workingDataAliasPrefix?.let { return mapDirViaAlias(dir, it, "Android/data") }
+        } else if (isAndroidObbPath(dir)) {
+            workingObbAliasPrefix?.let { return mapDirViaAlias(dir, it, "Android/obb") }
+        }
+        return dir
+    }
+
+    private fun listDirRaw(mapped: File): Array<File>? {
+        val direct = try { mapped.listFiles() } catch (_: Exception) { null }
+        if (direct != null) return direct
+        val names = try { mapped.list() } catch (_: Exception) { null } ?: return null
+        return names.map { File(mapped, it) }.toTypedArray()
+    }
+
+    private fun resolveAliasListing(ctx: android.content.Context, dir: File, isData: Boolean): Array<File>? {
+        val rel = currentRelPath(dir)
+        val normalPrefix = if (isData) "Android/data" else "Android/obb"
+        val suffix = rel.removePrefix(normalPrefix)
+        val candidates = if (isData) DATA_ALIAS_PREFIXES else OBB_ALIAS_PREFIXES
+        val cached = if (isData) workingDataAliasPrefix else workingObbAliasPrefix
+        val needMoreThanOne = isData && rel == "Android/data"
+        if (cached != null) {
+            val mapped = mapDirViaAlias(dir, cached, normalPrefix)
+            val list = listDirRaw(mapped)
+            if (list != null && (if (needMoreThanOne) list.size > 1 else list.isNotEmpty())) {
+                return list
+            }
+        }
+        var bestPrefix: String? = null
+        var bestList: Array<File>? = null
+        for (prefix in candidates) {
+            val mapped = mapDirViaAlias(dir, prefix, normalPrefix)
+            val list = listDirRaw(mapped) ?: continue
+            if (bestList == null || list.size > bestList.size) {
+                bestPrefix = prefix
+                bestList = list
+            }
+            if (if (needMoreThanOne) list.size > 1 else list.isNotEmpty()) break
+        }
+        if ((bestList == null || bestList.isEmpty()) && suffix.startsWith("/")) {
+            val sub = suffix.removePrefix("/")
+            val extraDirs = if (isData) {
+                listOf(
+                    "Android/\u200Ddata/\u200D$sub",
+                    "Android/\u200Bdata/\u200B$sub",
+                    "Android/data/\u200D$sub",
+                    "Android/data/\u200B$sub",
+                )
+            } else {
+                listOf(
+                    "Android/\u200Dobb/\u200D$sub",
+                    "Android/\u200Bobb/\u200B$sub",
+                    "Android/obb/\u200D$sub",
+                    "Android/obb/\u200B$sub",
+                )
+            }
+            for (relCandidate in extraDirs) {
+                val list = listDirRaw(File(rootDir, relCandidate)) ?: continue
+                if (bestList == null || list.size > bestList.size) {
+                    bestList = list
+                }
+                if (list.isNotEmpty()) break
+            }
+        }
+        if (bestPrefix != null && bestList != null) {
+            if (isData) workingDataAliasPrefix = bestPrefix else workingObbAliasPrefix = bestPrefix
+            val safeLabel = bestPrefix
+                .replace("\u200D", "\\u200D")
+                .replace("\u200B", "\\u200B")
+                .replace("\u200C", "\\u200C")
+                .replace("\uFEFF", "\\uFEFF")
+            StartupLog.mark(
+                ctx,
+                "explorador: alias FUSE directo OK ($safeLabel) en ${dir.absolutePath}: ${bestList.size} elementos"
+            )
+        }
+        return bestList
+    }
 
     private val dateFmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
     private val obbNameRegex =
@@ -177,7 +359,7 @@ class FileExplorerFragment : Fragment() {
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun afterTextChanged(s: Editable?) {
                     query = s?.toString().orEmpty().trim()
-                    refreshList()
+                    applyFilterAndSort()
                 }
             }
         )
@@ -187,30 +369,16 @@ class FileExplorerFragment : Fragment() {
         // v0.1.29: mostrar/ocultar archivos que empiezan por '.'.
         view.findViewById<Button>(R.id.btn_files_hidden).setOnClickListener {
             showHidden = !showHidden
-            refreshList()
+            applyFilterAndSort()
             updateSortButtons()
         }
-        // v0.1.37: activar acceso directo a /Android/obb mediante los permisos
-        // del sistema y reinicio limpio para obtener MOUNT_EXTERNAL_INSTALLER.
+        // v0.1.53: en Android/data y Android/obb restringidos ofrece un menú de
+        // desbloqueo real (SAF con bypass \u200B, SAF por paquete, ADB local o
+        // app Archivos del sistema).
         val btnGrantFolder = view.findViewById<Button>(R.id.btn_files_grant_folder)
-        btnGrantFolder.setText(R.string.settings_obb_activate_btn)
+        btnGrantFolder.setText(R.string.files_unlock_btn)
         btnGrantFolder.setOnClickListener {
-            val ctx = requireContext()
-            when {
-                !Environment.isExternalStorageManager() -> {
-                    PermissionsHelper.openAppAllFilesSettings(requireActivity())
-                }
-                !ctx.packageManager.canRequestPackageInstalls() -> {
-                    PermissionsHelper.openSettings(requireActivity(), PermissionsHelper.Kind.INSTALL_UNKNOWN)
-                }
-                GiraQuestApp.needsMountRestart(ctx) -> {
-                    Toast.makeText(ctx, R.string.restarting_to_activate_obb, Toast.LENGTH_SHORT).show()
-                    ProcessRebirth.triggerRebirth(ctx)
-                }
-                else -> {
-                    Toast.makeText(ctx, R.string.files_android_data_restricted, Toast.LENGTH_LONG).show()
-                }
-            }
+            showUnlockFolderDialog()
         }
 
         view.findViewById<Button>(R.id.btn_files_paste).setOnClickListener { doPaste() }
@@ -236,7 +404,7 @@ class FileExplorerFragment : Fragment() {
                         refresh()
                     }
                     currentDir != rootDir -> {
-                        navigateTo(currentDir.parentFile ?: rootDir)
+                        navigateTo(currentDir.parentFile ?: rootDir, trustIsDir = true)
                     }
                     else -> {
                         isEnabled = false
@@ -249,6 +417,27 @@ class FileExplorerFragment : Fragment() {
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, cb)
         updateBackEnabled()
         refresh()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (!pairingReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                requireContext(),
+                pairingReceiver,
+                IntentFilter(ACTION_PAIRING_RESULT),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            pairingReceiverRegistered = true
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (pairingReceiverRegistered) {
+            runCatching { requireContext().unregisterReceiver(pairingReceiver) }
+            pairingReceiverRegistered = false
+        }
     }
 
     override fun onResume() {
@@ -279,18 +468,19 @@ class FileExplorerFragment : Fragment() {
 
     private fun hasFilesPermission(): Boolean = Environment.isExternalStorageManager()
 
-    private fun navigateTo(dir: File) {
-        val target = if (dir.isDirectory) dir else rootDir
+    private fun navigateTo(dir: File, trustIsDir: Boolean = false) {
+        val cleanPath = dir.absolutePath.filterNot { it in ZERO_WIDTH_CHARS }
+        val cleanDir = File(cleanPath)
+        val target = if (trustIsDir || cleanDir.isDirectory || isAndroidDataPath(cleanDir) || isAndroidObbPath(cleanDir)) cleanDir else rootDir
         // No salir por encima de la raíz del almacenamiento.
         currentDir = if (target.absolutePath.startsWith(rootDir.absolutePath)) target else rootDir
         // v0.1.29: en directorios del sistema (Android/obb, Android/data)
         // los ocultos se enseñan por defecto.
-        val rel = try { currentDir.relativeTo(rootDir).path } catch (_: Exception) { "" }
+        val rel = currentRelPath(currentDir)
         if (rel.startsWith("Android/obb") || rel.startsWith("Android/data")) {
             showHidden = true
         }
-        selection.clear()
-        pickMode = null
+        if (pickMode == null) selection.clear()
         refresh()
     }
 
@@ -299,7 +489,7 @@ class FileExplorerFragment : Fragment() {
             sortMode = mode
             sortAsc = true
         }
-        refreshList()
+        applyFilterAndSort()
     }
 
     private fun refresh() {
@@ -363,92 +553,237 @@ class FileExplorerFragment : Fragment() {
                     else ContextCompat.getColor(requireContext(), R.color.gira_purple_dark)
                 )
                 if (!isLast) {
-                    setOnClickListener { navigateTo(seg.second) }
+                    setOnClickListener { navigateTo(seg.second, trustIsDir = true) }
                 }
                 setTypeface(typeface, if (isLast) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
             })
         }
     }
 
+    private fun isOwnPackageRestrictedDir(ctx: Context, rel: String): Boolean {
+        val pkg = ctx.packageName
+        return rel == "Android/data/$pkg" || rel.startsWith("Android/data/$pkg/") ||
+            rel == "Android/obb/$pkg" || rel.startsWith("Android/obb/$pkg/")
+    }
+
     private fun refreshList() {
         if (!isAdded) return
         val v = view ?: return
-        // v0.1.29: el listado se intenta por File, luego por SAF y luego
-        // por MediaStore, con el resultado de CADA intento en el log.
-        // listFiles() devuelve null cuando el FUSE no deja listar la
-        // carpeta (Android/obb/<paquete> en Horizon): antes eso se
-        // enseñaba como "vacío" sin más. Ahora se distingue "vacío de
-        // verdad" de "no se pudo listar" y se enseña el motivo.
+        val dir = currentDir
+        val rel = currentRelPath(dir)
+        val inData = isAndroidDataPath(dir)
+        val inObb = isAndroidObbPath(dir)
+        val inDataSub = inData && rel != "Android/data"
+        val inObbSub = inObb && rel != "Android/obb"
+        val seq = ++listRequestSeq
+        val ctx = requireContext().applicationContext
+        val btnGrant = v.findViewById<Button>(R.id.btn_files_grant_folder)
+
         listFailedReason = null
-        var raw: List<ExplorerItem>? = null
-        var fileListNull = false
-        try {
-            val files = currentDir.listFiles()
-            if (files != null) {
-                raw = files.map {
-                    ExplorerItem(
-                        name = it.name,
-                        isDirectory = it.isDirectory,
-                        size = try { it.length() } catch (_: Exception) { 0L },
-                        lastModified = try { it.lastModified() } catch (_: Exception) { 0L },
-                        file = it,
+        val adb = GiraAdbManager.getInstance(ctx)
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            data class LoadOutcome(
+                val entries: List<ExplorerItem>,
+                val viaAdb: Boolean,
+                val failedReason: String?,
+                val showUnlockBtn: Boolean,
+            )
+
+            val outcome = withContext(Dispatchers.IO) {
+                var fileListNull = false
+                var fileEntries: List<ExplorerItem>? = null
+                try {
+                    val files = dir.listFiles()
+                    if (files != null) {
+                        fileEntries = files.map {
+                            ExplorerItem(
+                                name = it.name,
+                                isDirectory = it.isDirectory,
+                                size = try { it.length() } catch (_: Exception) { 0L },
+                                lastModified = try { it.lastModified() } catch (_: Exception) { 0L },
+                                file = it,
+                            )
+                        }
+                        StartupLog.mark(
+                            ctx,
+                            "explorador: listar ${dir.absolutePath} vía File: ${fileEntries.size} elementos"
+                        )
+                    } else {
+                        fileListNull = true
+                        StartupLog.mark(
+                            ctx,
+                            "explorador: listar ${dir.absolutePath} vía File: null (sin permiso directo)"
+                        )
+                    }
+                } catch (e: Exception) {
+                    fileListNull = true
+                    StartupLog.mark(
+                        ctx,
+                        "explorador: listar ${dir.absolutePath} vía File: excepción ${e.javaClass.simpleName}: ${e.message}"
                     )
                 }
+
+                // 1) En Android/data (o Android/obb restringido), probar alias FUSE/casefold
+                //    directo (sin ADB, sin depuración inalámbrica, sin selector externo).
+                //    Importante: en subcarpetas Android/data/<paquete>, File.listFiles()
+                //    suele devolver [] (no null), por eso se prueba también cuando está vacío.
+                val shouldTryAlias = (inData && (fileListNull || fileEntries == null || fileEntries.isEmpty() || (rel == "Android/data" && fileEntries.size <= 1))) ||
+                    (inObb && (fileListNull || fileEntries == null || fileEntries.isEmpty()))
+                if (shouldTryAlias) {
+                    val aliasFiles = resolveAliasListing(ctx, dir, isData = inData)
+                    if (aliasFiles != null && aliasFiles.isNotEmpty() && !(inData && rel == "Android/data" && aliasFiles.size <= 1 && fileEntries != null && aliasFiles.size <= fileEntries.size)) {
+                        val mapped = aliasFiles.map {
+                            ExplorerItem(
+                                name = it.name,
+                                isDirectory = it.isDirectory,
+                                size = try { it.length() } catch (_: Exception) { 0L },
+                                lastModified = try { it.lastModified() } catch (_: Exception) { 0L },
+                                file = it,
+                                viaAlias = true,
+                            )
+                        }
+                        return@withContext LoadOutcome(mapped, viaAdb = false, failedReason = null, showUnlockBtn = false)
+                    }
+                }
+
+                if (fileEntries != null && fileEntries.isNotEmpty() && !(inData && rel == "Android/data" && fileEntries.size <= 1)) {
+                    val partialSubUnlock = inDataSub && !ObbSaf.hasCoveringTree(ctx, dir) && !adb.connected && !isOwnPackageRestrictedDir(ctx, rel)
+                    return@withContext LoadOutcome(fileEntries, viaAdb = false, failedReason = null, showUnlockBtn = partialSubUnlock)
+                }
+
+                // 2) SAF si ya hay un árbol concedido que cubra esta carpeta (incluido bypass \u200B).
+                val safCovering = ObbSaf.hasCoveringTree(ctx, dir)
+                if (safCovering) {
+                    val saf = try {
+                        ObbSaf.listDirAny(ctx, dir)
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (saf != null) {
+                        StartupLog.mark(ctx, "explorador: listar ${dir.absolutePath} vía SAF: ${saf.size} elementos")
+                        return@withContext LoadOutcome(
+                            entries = saf.map {
+                                ExplorerItem(
+                                    name = it.name?.filterNot { c -> c in ZERO_WIDTH_CHARS } ?: "?",
+                                    isDirectory = it.isDirectory,
+                                    size = it.length(),
+                                    lastModified = it.lastModified(),
+                                    docUri = it.uri,
+                                )
+                            },
+                            viaAdb = false,
+                            failedReason = null,
+                            showUnlockBtn = false,
+                        )
+                    }
+                }
+
+                // 3) Si ADB está conectado o emparejado previamente, reconectar y listar con UID 2000.
+                if (!adb.authRejected) {
+                    if (!adb.connected && (inData || inObb || fileListNull)) {
+                        adb.ensureConnectedForExplorer(allowMdnsDiscovery = true)
+                    }
+                    if (adb.connected) {
+                        val adbEntries = try {
+                            adb.listDirShell(dir.absolutePath)
+                        } catch (_: Exception) {
+                            null
+                        }
+                        if (adbEntries != null) {
+                            StartupLog.mark(ctx, "explorador: listar ${dir.absolutePath} vía ADB activo: ${adbEntries.size} elementos")
+                            return@withContext LoadOutcome(
+                                entries = adbEntries.map {
+                                    ExplorerItem(
+                                        name = it.name,
+                                        isDirectory = it.isDirectory,
+                                        size = it.size,
+                                        lastModified = it.lastModified,
+                                        viaAdb = true,
+                                        adbPath = it.fullPath,
+                                    )
+                                },
+                                viaAdb = true,
+                                failedReason = null,
+                                showUnlockBtn = false,
+                            )
+                        }
+                    }
+                }
+
+                // 4) Fallback SAF para carpetas padre que muestran subárboles concedidos.
+                if (!safCovering) {
+                    val saf = try {
+                        ObbSaf.listDirAny(ctx, dir)
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (saf != null) {
+                        StartupLog.mark(ctx, "explorador: listar ${dir.absolutePath} vía SAF hijo: ${saf.size} elementos")
+                        return@withContext LoadOutcome(
+                            entries = saf.map {
+                                ExplorerItem(
+                                    name = it.name?.filterNot { c -> c in ZERO_WIDTH_CHARS } ?: "?",
+                                    isDirectory = it.isDirectory,
+                                    size = it.length(),
+                                    lastModified = it.lastModified(),
+                                    docUri = it.uri,
+                                )
+                            },
+                            viaAdb = false,
+                            failedReason = null,
+                            showUnlockBtn = inDataSub || inObbSub,
+                        )
+                    }
+                }
+
+                // 5) En Android/data/<pkg> (o Android/obb/<pkg>), File.listFiles() suele devolver []
+                //    (array NO nulo pero vacío) aunque la carpeta tenga archivos reales ocultos por
+                //    Scoped Storage / fuse-bpf. Si no tenemos SAF ni ADB ni es nuestro paquete, NO
+                //    la tratamos como "Carpeta vacía" silenciosa: enseñamos aviso + botón Desbloquear.
+                if ((inDataSub || inObbSub) && !isOwnPackageRestrictedDir(ctx, rel)) {
+                    val reason = if (inData) ctx.getString(R.string.files_data_restricted_hint)
+                    else ctx.getString(R.string.files_list_null_reason)
+                    return@withContext LoadOutcome(emptyList(), viaAdb = false, failedReason = reason, showUnlockBtn = true)
+                }
+
+                if (fileEntries != null) {
+                    return@withContext LoadOutcome(fileEntries, viaAdb = false, failedReason = null, showUnlockBtn = false)
+                }
+
+                val media = listViaMediaStore(dir)
                 StartupLog.mark(
-                    requireContext(),
-                    "explorador: listar ${currentDir.absolutePath} vía File: ${raw.size} elementos"
+                    ctx,
+                    "explorador: listar ${dir.absolutePath} vía MediaStore: " +
+                        if (media == null) "falló la consulta" else "${media.size} elementos"
                 )
+                val list = media ?: emptyList()
+                val reason = if (list.isEmpty() && fileListNull) {
+                    if (inData) ctx.getString(R.string.files_data_restricted_hint)
+                    else ctx.getString(R.string.files_list_null_reason)
+                } else null
+                LoadOutcome(list, viaAdb = false, failedReason = reason, showUnlockBtn = reason != null)
+            }
+
+            if (!isAdded || seq != listRequestSeq || view == null) return@launch
+            currentDirViaAdb = outcome.viaAdb
+            rawItems = outcome.entries
+            listFailedReason = outcome.failedReason
+            applyFilterAndSort()
+
+            if (outcome.showUnlockBtn) {
+                btnGrant.visibility = View.VISIBLE
+                btnGrant.setText(R.string.files_unlock_btn)
             } else {
-                fileListNull = true
-                StartupLog.mark(
-                    requireContext(),
-                    "explorador: listar ${currentDir.absolutePath} vía File: null (sin permiso para listar o no legible)"
-                )
-            }
-        } catch (e: Exception) {
-            fileListNull = true
-            StartupLog.mark(
-                requireContext(),
-                "explorador: listar ${currentDir.absolutePath} vía File: excepción ${e.javaClass.simpleName}: ${e.message}"
-            )
-        }
-        if (raw == null) {
-            val saf = try {
-                ObbSaf.listDir(requireContext(), currentDir)
-            } catch (_: Exception) {
-                null
-            }
-            StartupLog.mark(
-                requireContext(),
-                "explorador: listar ${currentDir.absolutePath} vía SAF: " +
-                    if (saf == null) "sin árbol concedido o fuera del árbol"
-                    else "${saf.size} elementos"
-            )
-            if (saf != null) {
-                raw = saf.map {
-                    ExplorerItem(
-                        name = it.name ?: "?",
-                        isDirectory = it.isDirectory,
-                        size = it.length(),
-                        lastModified = it.lastModified(),
-                        docUri = it.uri,
-                    )
-                }
+                btnGrant.visibility = View.GONE
             }
         }
-        if (raw == null) {
-            val media = listViaMediaStore(currentDir)
-            StartupLog.mark(
-                requireContext(),
-                "explorador: listar ${currentDir.absolutePath} vía MediaStore: " +
-                    if (media == null) "falló la consulta" else "${media.size} elementos"
-            )
-            raw = media ?: emptyList()
-        }
-        if (raw.isEmpty() && fileListNull) {
-            listFailedReason = "sin permiso para listar (File.listFiles() devolvió null y las vías alternativas no devolvieron nada). Concede la carpeta para ver su contenido."
-        }
-        val filtered = raw
+    }
+
+    private fun applyFilterAndSort() {
+        if (!isAdded) return
+        val v = view ?: return
+        val filtered = rawItems
             .filter { showHidden || !it.name.startsWith(".") }
             .filter { query.isEmpty() || it.name.contains(query, ignoreCase = true) }
         val byName = compareBy<ExplorerItem> { it.name.lowercase() }
@@ -459,8 +794,6 @@ class FileExplorerFragment : Fragment() {
             SortMode.SIZE -> bySize
             SortMode.DATE -> byDate
         }
-        // Carpetas primero, luego archivos; dentro de cada grupo, el orden
-        // elegido (asc/desc).
         val sorted = filtered.sortedWith(
             compareByDescending<ExplorerItem> { it.isDirectory }
                 .then(if (sortAsc) cmp else cmp.reversed())
@@ -470,14 +803,10 @@ class FileExplorerFragment : Fragment() {
         val tvEmpty = v.findViewById<TextView>(R.id.tv_files_empty)
         if (items.isEmpty()) {
             tvEmpty.visibility = View.VISIBLE
-            tvEmpty.text = listFailedReason?.let {
-                getString(R.string.files_list_failed, it)
-            } ?: getString(R.string.files_empty_real)
+            tvEmpty.text = listFailedReason ?: getString(R.string.files_empty_real)
         } else {
             tvEmpty.visibility = View.GONE
         }
-        v.findViewById<Button>(R.id.btn_files_grant_folder).visibility =
-            if (listFailedReason != null) View.VISIBLE else View.GONE
         updateSortButtons()
     }
 
@@ -564,26 +893,90 @@ class FileExplorerFragment : Fragment() {
     // ---------- Acciones al tocar ----------
 
     private fun onFileTap(item: ExplorerItem) {
+        if (pickMode != null) {
+            if (item.isDirectory) navigateTo(File(currentDir, item.name), trustIsDir = true)
+            return
+        }
         if (selection.isNotEmpty()) {
             if (!selection.remove(item)) selection.add(item)
             refresh()
             return
         }
-        if (pickMode != null) return // en modo pegar, los toques no abren nada
+        if (item.isDirectory) {
+            navigateTo(File(currentDir, item.name), trustIsDir = true)
+            return
+        }
+        if (item.viaAdb) {
+            onAdbTap(item)
+            return
+        }
         if (item.viaSaf) {
             onSafTap(item)
             return
         }
         val file = item.file ?: return
         when {
-            file.isDirectory -> navigateTo(file)
             file.extension.equals("apk", true) -> askInstallApk(file)
             file.extension.equals("obb", true) -> askCopyObb(file)
-            file.extension.equals("log", true) || file.extension.equals("txt", true) -> showTextFile(file)
+            file.extension.lowercase() in setOf("log", "txt", "json", "xml", "cfg", "ini", "yaml", "yml", "properties") -> showTextFile(file)
             file.extension.lowercase() in setOf("jpg", "jpeg", "png", "webp", "gif") -> showImagePreview(file)
             file.extension.equals("7z", true) -> showArchiveInfo(file)
             else -> showFileInfo(file)
         }
+    }
+
+    /** Toque en un archivo dentro de una carpeta listada vía ADB shell
+     *  (p. ej. /Android/data): lo copia al caché accesible de la app
+     *  para abrirlo, previsualizarlo, instalarlo o compartirlo sin límites. */
+    private fun onAdbTap(item: ExplorerItem) {
+        val srcPath = item.adbPath ?: return
+        val ctx = requireContext()
+        val cacheBase = ctx.externalCacheDir ?: ctx.cacheDir
+        val tmpDir = File(cacheBase, "explorer_tmp")
+        val tmpFile = File(tmpDir, item.name)
+        val ext = item.extension.lowercase()
+        val adb = GiraAdbManager.getInstance(ctx)
+
+        Toast.makeText(ctx, getString(R.string.files_adb_loading), Toast.LENGTH_SHORT).show()
+        viewLifecycleOwner.lifecycleScope.launch {
+            val ok = adb.stageRestrictedFileToCache(srcPath, tmpFile)
+            if (!isAdded) return@launch
+            if (!ok) {
+                Toast.makeText(ctx, getString(R.string.files_read_failed, item.name), Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            when {
+                ext == "apk" -> askInstallApk(tmpFile)
+                ext == "obb" -> askCopyObb(tmpFile)
+                ext in setOf("txt", "log", "json", "xml", "cfg", "ini", "yaml", "yml", "properties") -> showTextFile(tmpFile)
+                ext in setOf("jpg", "jpeg", "png", "webp", "gif") -> showImagePreview(tmpFile)
+                ext == "7z" -> showArchiveInfo(tmpFile)
+                else -> showAdbFileInfo(item, tmpFile)
+            }
+        }
+    }
+
+    private fun showAdbFileInfo(item: ExplorerItem, cachedFile: File) {
+        val ctx = requireContext()
+        val path = item.adbPath ?: File(currentDir, item.name).absolutePath
+        AlertDialog.Builder(ctx)
+            .setTitle(item.name)
+            .setMessage("${RepoAdapter.formatSize(item.size)} · ${dateFmt.format(Date(item.lastModified))}\n\n$path")
+            .setPositiveButton(R.string.share) { _, _ -> shareFile(cachedFile) }
+            .setNeutralButton(R.string.files_delete) { _, _ ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val ok = GiraAdbManager.getInstance(ctx).deleteShell(path)
+                    if (!isAdded) return@launch
+                    Toast.makeText(
+                        ctx,
+                        if (ok) getString(R.string.files_deleted, 1) else getString(R.string.files_delete_failed),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    refresh()
+                }
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
     }
 
     /** Toque en un elemento listado por SAF (File.listFiles() devolvió
@@ -595,14 +988,16 @@ class FileExplorerFragment : Fragment() {
     private fun onSafTap(item: ExplorerItem) {
         val uri = item.docUri ?: return
         if (item.isDirectory) {
-            navigateTo(File(currentDir, item.name))
+            navigateTo(File(currentDir, item.name), trustIsDir = true)
             return
         }
-        if (item.extension.equals("apk", true)) {
+        val ext = item.extension.lowercase()
+        if (ext == "apk" || ext == "obb" || ext == "7z") {
             viewLifecycleOwner.lifecycleScope.launch {
                 val cached = withContext(Dispatchers.IO) {
                     try {
-                        val tmp = File(requireContext().cacheDir, item.name)
+                        val tmpDir = File(requireContext().cacheDir, "saf_tmp").apply { mkdirs() }
+                        val tmp = File(tmpDir, item.name)
                         requireContext().contentResolver.openInputStream(uri)?.use { input ->
                             tmp.outputStream().use { output -> input.copyTo(output) }
                         }
@@ -621,14 +1016,90 @@ class FileExplorerFragment : Fragment() {
                 } else {
                     StartupLog.mark(
                         requireContext(),
-                        "explorador: APK por SAF ${item.name} copiado a caché (${cached.length()} bytes)"
+                        "explorador: archivo SAF ${item.name} copiado a caché (${cached.length()} bytes)"
                     )
-                    askInstallApk(cached)
+                    when (ext) {
+                        "apk" -> askInstallApk(cached)
+                        "obb" -> askCopyObb(cached)
+                        "7z" -> showArchiveInfo(cached)
+                    }
                 }
             }
             return
         }
+        if (ext in setOf("txt", "log", "json", "xml", "cfg", "ini", "yaml", "yml", "properties")) {
+            showSafTextFile(item)
+            return
+        }
+        if (ext in setOf("jpg", "jpeg", "png", "webp", "gif")) {
+            showSafImagePreview(item)
+            return
+        }
         showSafFileInfo(item)
+    }
+
+    private fun showSafTextFile(item: ExplorerItem) {
+        val uri = item.docUri ?: return
+        val text = try {
+            requireContext().contentResolver.openInputStream(uri)?.use { input ->
+                val buf = ByteArray(200_000)
+                var total = 0
+                while (total < buf.size) {
+                    val n = input.read(buf, total, buf.size - total)
+                    if (n <= 0) break
+                    total += n
+                }
+                val hasMore = input.read() != -1
+                String(buf, 0, total, Charsets.UTF_8) +
+                    if (hasMore) getString(R.string.files_text_truncated) else ""
+            } ?: getString(R.string.files_read_failed, item.name)
+        } catch (e: Exception) {
+            getString(R.string.files_read_failed, e.message ?: e.javaClass.simpleName)
+        }
+        val tv = TextView(requireContext()).apply {
+            this.text = text
+            setTextIsSelectable(true)
+            setPadding(24, 16, 24, 16)
+            textSize = 13f
+            typeface = android.graphics.Typeface.MONOSPACE
+        }
+        val scroll = ScrollView(requireContext()).apply { addView(tv) }
+        AlertDialog.Builder(requireContext())
+            .setTitle(item.name)
+            .setView(scroll)
+            .setPositiveButton(R.string.share) { _, _ -> shareUri(item.name, uri) }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun showSafImagePreview(item: ExplorerItem) {
+        val uri = item.docUri ?: return
+        val iv = ImageView(requireContext()).apply {
+            adjustViewBounds = true
+            setPadding(8, 8, 8, 8)
+        }
+        iv.load(uri)
+        AlertDialog.Builder(requireContext())
+            .setTitle(item.name)
+            .setView(iv)
+            .setPositiveButton(R.string.share) { _, _ -> shareUri(item.name, uri) }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun shareUri(name: String, uri: Uri) {
+        val share = Intent(Intent.ACTION_SEND).apply {
+            type = "application/octet-stream"
+            putExtra(Intent.EXTRA_SUBJECT, name)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newUri(requireContext().contentResolver, name, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            startActivity(Intent.createChooser(share, getString(R.string.share)))
+        } catch (_: Exception) {
+            Toast.makeText(requireContext(), R.string.files_share_failed, Toast.LENGTH_LONG).show()
+        }
     }
 
     /** Ficha de un archivo listado por SAF: tamaño/fecha/ruta, compartir
@@ -801,7 +1272,7 @@ class FileExplorerFragment : Fragment() {
             val bytes = file.readBytes()
             val cut = bytes.size > 200_000
             val shown = if (cut) bytes.copyOf(200_000) else bytes
-            String(shown, Charsets.UTF_8) + if (cut) "\n\n…(truncado, el archivo es mayor)" else ""
+            String(shown, Charsets.UTF_8) + if (cut) getString(R.string.files_text_truncated) else ""
         } catch (e: Exception) {
             getString(R.string.files_read_failed, e.message ?: e.javaClass.simpleName)
         }
@@ -869,7 +1340,7 @@ class FileExplorerFragment : Fragment() {
                 } else {
                     header + getString(R.string.files_7z_summary, count, RepoAdapter.formatSize(total)) +
                         "\n\n" + lines.joinToString("\n") +
-                        if (count > 60) "\n…y ${count - 60} más" else ""
+                        if (count > 60) getString(R.string.files_more_items, count - 60) else ""
                 }
             }
         } catch (e: Exception) {
@@ -878,10 +1349,11 @@ class FileExplorerFragment : Fragment() {
     }
 
     private fun showFileInfo(file: File) {
+        val displayPath = file.absolutePath.filterNot { it in ZERO_WIDTH_CHARS }
         AlertDialog.Builder(requireContext())
             .setTitle(file.name)
             .setMessage(
-                "${RepoAdapter.formatSize(file.length())} · ${dateFmt.format(Date(file.lastModified()))}\n\n${file.absolutePath}"
+                "${RepoAdapter.formatSize(file.length())} · ${dateFmt.format(Date(file.lastModified()))}\n\n$displayPath"
             )
             .setPositiveButton(R.string.share) { _, _ -> shareFile(file) }
             .setNegativeButton(R.string.close, null)
@@ -890,6 +1362,32 @@ class FileExplorerFragment : Fragment() {
 
     private fun shareFile(file: File) {
         val ctx = requireContext()
+        val needsStaging = file.absolutePath.any { it in ZERO_WIDTH_CHARS }
+        if (!needsStaging) {
+            launchShareUri(ctx, file)
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val staged = withContext(Dispatchers.IO) {
+                try {
+                    val dir = File(ctx.cacheDir, "share_tmp").apply { mkdirs() }
+                    val dst = File(dir, file.name)
+                    file.copyTo(dst, overwrite = true)
+                    dst
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (!isAdded) return@launch
+            if (staged == null) {
+                Toast.makeText(ctx, R.string.files_share_failed, Toast.LENGTH_LONG).show()
+            } else {
+                launchShareUri(ctx, staged)
+            }
+        }
+    }
+
+    private fun launchShareUri(ctx: android.content.Context, file: File) {
         val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
         val share = Intent(Intent.ACTION_SEND).apply {
             type = "application/octet-stream"
@@ -914,37 +1412,88 @@ class FileExplorerFragment : Fragment() {
 
     private fun doPaste() {
         val mode = pickMode ?: return
-        // v0.1.29: copiar/mover solo vale para elementos con File; los
-        // vistos por SAF se quedan fuera (se avisa).
-        val targets = selection.mapNotNull { it.file }
-        val skippedSaf = selection.count { it.viaSaf }
+        val destDir = currentDir
+        val ioDestDir = effectiveIoDir(destDir)
+        val destSafNode = ObbSaf.findDirNode(requireContext(), destDir)
+        val targets = selection.toList()
         if (targets.isEmpty()) {
             pickMode = null
-            if (skippedSaf > 0) {
-                Toast.makeText(
-                    requireContext(),
-                    R.string.files_saf_only,
-                    Toast.LENGTH_LONG
-                ).show()
-            }
             refresh()
             return
         }
-        val destDir = currentDir
         pickMode = null
         viewLifecycleOwner.lifecycleScope.launch {
             var done = 0
             var errors = 0
+            val ctx = requireContext()
+            val adb = GiraAdbManager.getInstance(ctx)
             withContext(Dispatchers.IO) {
-                for (src in targets) {
+                for (item in targets) {
                     try {
-                        val dest = uniqueDest(destDir, src.name)
-                        if (mode == PickMode.COPY) {
-                            copyItem(src, dest)
-                        } else {
-                            moveItem(src, dest)
+                        val srcPath = item.effectivePath
+                        if (item.viaAdb && srcPath != null) {
+                            val uniqueName = adb.uniqueDestShell(destDir.absolutePath, item.name)
+                            val ok = if (mode == PickMode.COPY) {
+                                adb.copyShell(srcPath, destDir.absolutePath, uniqueName)
+                            } else {
+                                adb.moveShell(srcPath, destDir.absolutePath, uniqueName)
+                            }
+                            if (ok) done++ else errors++
+                            continue
                         }
-                        done++
+                        val src = item.file
+                        if (src != null) {
+                            val normalOk = try {
+                                val dest = uniqueDest(ioDestDir, src.name)
+                                if (mode == PickMode.COPY) copyItem(src, dest) else moveItem(src, dest)
+                                true
+                            } catch (_: Exception) {
+                                false
+                            }
+                            if (normalOk) {
+                                done++
+                            } else if (destSafNode != null) {
+                                val r = if (src.isDirectory) {
+                                    ObbSaf.copyDirToSafDir(ctx, destDir, src)
+                                } else {
+                                    ObbSaf.copyFileToSafDir(ctx, destDir, src)
+                                }
+                                if (r.ok) {
+                                    if (mode == PickMode.MOVE) {
+                                        if (src.isDirectory) src.deleteRecursively() else src.delete()
+                                    }
+                                    done++
+                                } else {
+                                    errors++
+                                }
+                            } else if (adb.connected) {
+                                val uniqueName = adb.uniqueDestShell(destDir.absolutePath, src.name)
+                                val adbOk = if (mode == PickMode.COPY) {
+                                    adb.copyShell(src.absolutePath, destDir.absolutePath, uniqueName)
+                                } else {
+                                    adb.moveShell(src.absolutePath, destDir.absolutePath, uniqueName)
+                                }
+                                if (adbOk) done++ else errors++
+                            } else {
+                                errors++
+                            }
+                        } else if (item.viaSaf && item.docUri != null) {
+                            val ok = if (item.isDirectory) {
+                                copySafDirToDest(ctx, File(currentDir, item.name), item.docUri, item.name, ioDestDir, destSafNode)
+                            } else {
+                                copySafFileToDest(ctx, item.docUri, item.name, ioDestDir, destSafNode)
+                            }
+                            if (ok) {
+                                if (mode == PickMode.MOVE) {
+                                    runCatching { DocumentFile.fromSingleUri(ctx, item.docUri)?.delete() }
+                                }
+                                done++
+                            } else {
+                                errors++
+                            }
+                        } else {
+                            errors++
+                        }
                     } catch (_: Exception) {
                         errors++
                     }
@@ -952,17 +1501,311 @@ class FileExplorerFragment : Fragment() {
             }
             if (!isAdded) return@launch
             StartupLog.mark(
-                requireContext(),
+                ctx,
                 "explorador: ${if (mode == PickMode.COPY) "copiar" else "mover"} ${targets.size} elementos → ${destDir.absolutePath}: $done ok, $errors errores"
             )
             Toast.makeText(
-                requireContext(),
+                ctx,
                 getString(R.string.files_paste_done, done, errors),
                 Toast.LENGTH_LONG
             ).show()
             selection.clear()
             refresh()
         }
+    }
+
+    private fun copySafFileToDest(
+        ctx: android.content.Context,
+        srcUri: Uri,
+        name: String,
+        destDir: File,
+        destSafNode: DocumentFile?,
+    ): Boolean {
+        val directOk = try {
+            val dest = uniqueDest(destDir, name)
+            ctx.contentResolver.openInputStream(srcUri)?.use { input ->
+                dest.outputStream().use { output -> input.copyTo(output) }
+            } ?: return false
+            dest.exists()
+        } catch (_: Exception) {
+            false
+        }
+        if (directOk) return true
+        val node = destSafNode ?: return false
+        return try {
+            val existing = node.findFile(name)
+            existing?.delete()
+            val doc = node.createFile("application/octet-stream", name) ?: return false
+            ctx.contentResolver.openInputStream(srcUri)?.use { input ->
+                ctx.contentResolver.openOutputStream(doc.uri)?.use { out ->
+                    input.copyTo(out)
+                } ?: return false
+            } ?: return false
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun copySafDirToDest(
+        ctx: Context,
+        srcDirFile: File,
+        srcDirUri: Uri,
+        dirName: String,
+        destParentDir: File,
+        destSafParentNode: DocumentFile?,
+    ): Boolean {
+        val srcDoc = ObbSaf.findDirNode(ctx, srcDirFile)
+            ?: DocumentFile.fromTreeUri(ctx, srcDirUri)
+            ?: return false
+        val localTarget = uniqueDest(destParentDir, dirName)
+        val localOk = try {
+            localTarget.mkdirs() || localTarget.isDirectory
+        } catch (_: Exception) {
+            false
+        }
+        val targetSafNode = if (!localOk && destSafParentNode != null) {
+            try {
+                destSafParentNode.findFile(dirName) ?: destSafParentNode.createDirectory(dirName)
+            } catch (_: Exception) {
+                null
+            }
+        } else null
+        if (!localOk && targetSafNode == null) return false
+
+        val children = try {
+            srcDoc.listFiles()
+        } catch (_: Exception) {
+            return false
+        }
+        var allOk = true
+        for (child in children) {
+            val childName = child.name ?: continue
+            if (child.isDirectory) {
+                if (!copySafDirToDest(ctx, File(srcDirFile, childName), child.uri, childName, localTarget, targetSafNode)) {
+                    allOk = false
+                }
+            } else {
+                if (!copySafFileToDest(ctx, child.uri, childName, localTarget, targetSafNode)) {
+                    allOk = false
+                }
+            }
+        }
+        return allOk
+    }
+
+    // ---------- Desbloqueo de carpetas restringidas (v0.1.53) ----------
+
+    private fun showUnlockFolderDialog() {
+        if (!isAdded) return
+        val ctx = requireContext()
+        val rel = currentRelPath(currentDir)
+        val inData = isAndroidDataPath(currentDir)
+        val inObb = isAndroidObbPath(currentDir)
+        val pkgName = when {
+            rel.startsWith("Android/data/") -> rel.removePrefix("Android/data/").substringBefore("/")
+            rel.startsWith("Android/obb/") -> rel.removePrefix("Android/obb/").substringBefore("/")
+            else -> ""
+        }
+        val subRel = when {
+            rel.startsWith("Android/data/") -> rel.removePrefix("Android/data/")
+            rel.startsWith("Android/obb/") -> rel.removePrefix("Android/obb/")
+            else -> ""
+        }
+
+        val labels = mutableListOf<String>()
+        val actions = mutableListOf<() -> Unit>()
+
+        if (inObb && GiraQuestApp.needsMountRestart(ctx)) {
+            labels += getString(R.string.settings_obb_activate_btn)
+            actions += {
+                when {
+                    !Environment.isExternalStorageManager() ->
+                        PermissionsHelper.openAppAllFilesSettings(requireActivity())
+                    !ctx.packageManager.canRequestPackageInstalls() ->
+                        PermissionsHelper.openSettings(requireActivity(), PermissionsHelper.Kind.INSTALL_UNKNOWN)
+                    else -> {
+                        Toast.makeText(ctx, R.string.restarting_to_activate_obb, Toast.LENGTH_SHORT).show()
+                        ProcessRebirth.triggerRebirth(ctx)
+                    }
+                }
+            }
+        }
+
+        if (inData) {
+            labels += getString(R.string.files_unlock_saf_bypass)
+            actions += {
+                launchSafGrant(ObbSaf.initialDataBypassTreeUri(subRel.ifEmpty { null }))
+            }
+            if (pkgName.isNotEmpty()) {
+                labels += getString(R.string.files_unlock_saf_pkg, pkgName)
+                actions += {
+                    launchSafGrant(ObbSaf.initialPackageDataTreeUri(pkgName))
+                }
+            }
+        } else if (inObb) {
+            labels += getString(R.string.files_unlock_saf_bypass).replace("Android/data", "Android/obb")
+            actions += {
+                launchSafGrant(ObbSaf.initialObbBypassTreeUri(subRel.ifEmpty { null }))
+            }
+            ObbSaf.initialTreeUriFor(currentDir)?.let { uri ->
+                if (pkgName.isNotEmpty()) {
+                    labels += getString(R.string.files_unlock_saf_pkg, pkgName)
+                    actions += { launchSafGrant(uri) }
+                }
+            }
+        } else {
+            ObbSaf.initialTreeUriFor(currentDir)?.let { uri ->
+                labels += getString(R.string.files_unlock_saf_pkg, currentDir.name)
+                actions += { launchSafGrant(uri) }
+            }
+        }
+
+        labels += getString(R.string.files_unlock_adb)
+        actions += { startLocalAdbUnlock() }
+
+        labels += getString(R.string.files_unlock_system_files)
+        actions += { openSystemFilesApp() }
+
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.files_unlock_btn)
+            .setItems(labels.toTypedArray()) { _, which ->
+                actions.getOrNull(which)?.invoke()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun launchSafGrant(initialUri: Uri) {
+        val ctx = requireContext()
+        try {
+            StartupLog.mark(ctx, "explorador: lanzando selector SAF → $initialUri")
+            safTreeLauncher.launch(ObbSaf.openDocumentTreeIntent(initialUri))
+        } catch (e: Exception) {
+            StartupLog.mark(ctx, "explorador: SAF falló ($initialUri): ${e.message}")
+            Toast.makeText(ctx, R.string.files_data_picker_unavailable, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun startLocalAdbUnlock() {
+        val ctx = requireContext()
+        val adb = GiraAdbManager.getInstance(ctx)
+        adb.clearAuthRejection()
+        Toast.makeText(ctx, R.string.files_adb_connecting, Toast.LENGTH_SHORT).show()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            // 1) Reintento si ya estaba emparejado o con Wireless ADB TCP 5555 activo.
+            if (adb.ensureConnectedForExplorer(allowMdnsDiscovery = true)) {
+                if (!isAdded) return@launch
+                Toast.makeText(ctx, R.string.files_adb_connected_toast, Toast.LENGTH_SHORT).show()
+                refresh()
+                return@launch
+            }
+
+            // 2) Comprobar si TCP 5555 local está escuchando (Wireless ADB clásico en Quest).
+            val tcpEp = withContext(Dispatchers.IO) {
+                val discovered = AdbPortDiscovery.discoverTcp(ctx, 2_000)
+                if (discovered != null) discovered
+                else {
+                    val localOpen = try {
+                        Socket().use { s ->
+                            s.connect(InetSocketAddress("127.0.0.1", 5555), 800)
+                            true
+                        }
+                    } catch (_: Exception) {
+                        false
+                    }
+                    if (localOpen) AdbPortDiscovery.Endpoint("127.0.0.1", 5555) else null
+                }
+            }
+            if (tcpEp != null) {
+                val res = adb.connectTcpFirstTime(tcpEp.host, tcpEp.port)
+                if (!isAdded) return@launch
+                if (res is GiraAdbManager.TcpFirstConnectOutcome.Ok) {
+                    Toast.makeText(ctx, R.string.files_adb_connected_toast, Toast.LENGTH_SHORT).show()
+                    refresh()
+                    return@launch
+                }
+            }
+
+            if (!isAdded) return@launch
+            // 3) Lanzar servicio de emparejamiento inalámbrico (notificación + ventana flotante)
+            //    y abrir Opciones de desarrollador / Depuración inalámbrica.
+            try {
+                ContextCompat.startForegroundService(ctx, Intent(ctx, PairingService::class.java))
+            } catch (_: Exception) {
+            }
+            if (AndroidSettings.canDrawOverlays(ctx)) {
+                PairOverlay.show(ctx)
+            }
+            AlertDialog.Builder(ctx)
+                .setTitle(R.string.files_unlock_adb)
+                .setMessage(R.string.files_adb_pair_guide)
+                .setPositiveButton(R.string.perms_open_settings) { _, _ ->
+                    val intents = listOf(
+                        Intent(AndroidSettings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
+                        Intent(AndroidSettings.ACTION_SETTINGS),
+                    )
+                    for (it in intents) {
+                        try {
+                            startActivity(it)
+                            break
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+        }
+    }
+
+    private fun openSystemFilesApp() {
+        val ctx = requireContext()
+        val rel = currentRelPath(currentDir)
+        val docId = if (rel.isEmpty()) "primary:" else "primary:$rel"
+        val docUri = Uri.Builder()
+            .scheme("content")
+            .authority("com.android.externalstorage.documents")
+            .appendPath("document")
+            .appendPath(docId)
+            .build()
+
+        val candidates = listOf(
+            Intent(Intent.ACTION_VIEW).apply {
+                component = ComponentName(
+                    "com.android.documentsui",
+                    "com.android.documentsui.files.FilesActivity"
+                )
+                setDataAndType(docUri, "vnd.android.document/directory")
+            },
+            Intent(Intent.ACTION_VIEW).apply {
+                component = ComponentName(
+                    "com.google.android.documentsui",
+                    "com.android.documentsui.files.FilesActivity"
+                )
+                setDataAndType(docUri, "vnd.android.document/directory")
+            },
+            Intent(Intent.ACTION_VIEW).apply {
+                component = ComponentName(
+                    "com.android.documentsui",
+                    "com.android.documentsui.files.FilesActivity"
+                )
+            },
+            Intent(Intent.ACTION_VIEW).apply {
+                component = ComponentName(
+                    "com.google.android.documentsui",
+                    "com.android.documentsui.files.FilesActivity"
+                )
+            },
+        )
+        for (intent in candidates) {
+            try {
+                startActivity(intent)
+                return
+            } catch (_: Exception) {
+            }
+        }
+        Toast.makeText(ctx, R.string.files_system_files_missing, Toast.LENGTH_LONG).show()
     }
 
     private fun uniqueDest(dir: File, name: String): File {
@@ -1007,27 +1850,40 @@ class FileExplorerFragment : Fragment() {
                 val newName = input.text.toString().trim()
                 if (newName.isBlank() || newName.contains("/") || newName == item.name) return@setPositiveButton
                 viewLifecycleOwner.lifecycleScope.launch {
+                    val ctx = requireContext()
+                    val adb = GiraAdbManager.getInstance(ctx)
                     val ok = withContext(Dispatchers.IO) {
-                        // v0.1.29: los elementos SAF se renombran por
-                        // DocumentFile (no hay File utilizable).
-                        if (item.viaSaf && item.docUri != null) {
-                            try {
-                                DocumentFile.fromSingleUri(requireContext(), item.docUri)
-                                    ?.renameTo(newName) != null
-                            } catch (_: Exception) {
-                                false
+                        when {
+                            item.viaAdb && item.adbPath != null -> {
+                                val newPath = "${currentDir.absolutePath.trimEnd('/')}/$newName"
+                                adb.renameShell(item.adbPath, newPath)
                             }
-                        } else {
-                            item.file?.renameTo(File(item.file.parentFile, newName)) == true
+                            item.viaSaf && item.docUri != null -> {
+                                try {
+                                    val doc = ObbSaf.findChildNode(ctx, currentDir, item.name)
+                                        ?: DocumentFile.fromSingleUri(ctx, item.docUri)
+                                    doc?.renameTo(newName) == true
+                                } catch (_: Exception) {
+                                    false
+                                }
+                            }
+                            else -> {
+                                val f = item.file
+                                (f != null && f.renameTo(File(f.parentFile, newName))) ||
+                                    (adb.connected && f != null && adb.renameShell(
+                                        f.absolutePath.filterNot { it in ZERO_WIDTH_CHARS },
+                                        "${currentDir.absolutePath.trimEnd('/')}/$newName"
+                                    ))
+                            }
                         }
                     }
                     if (!isAdded) return@launch
                     StartupLog.mark(
-                        requireContext(),
+                        ctx,
                         "explorador: renombrar ${item.name} → $newName: ${if (ok) "ok" else "falló"}"
                     )
                     Toast.makeText(
-                        requireContext(),
+                        ctx,
                         if (ok) getString(R.string.files_renamed, newName)
                         else getString(R.string.files_rename_failed),
                         Toast.LENGTH_LONG
@@ -1043,7 +1899,7 @@ class FileExplorerFragment : Fragment() {
     private fun askDelete() {
         if (selection.isEmpty()) return
         val names = selection.take(5).joinToString("\n") { "• ${it.name}" }
-        val extra = if (selection.size > 5) "\n…y ${selection.size - 5} más" else ""
+        val extra = if (selection.size > 5) getString(R.string.files_more_items, selection.size - 5) else ""
         AlertDialog.Builder(requireContext())
             .setTitle(getString(R.string.files_delete_title, selection.size))
             .setMessage(names + extra)
@@ -1051,19 +1907,26 @@ class FileExplorerFragment : Fragment() {
                 val targets = selection.toList()
                 selection.clear()
                 viewLifecycleOwner.lifecycleScope.launch {
+                    val ctx = requireContext()
+                    val adb = GiraAdbManager.getInstance(ctx)
                     var done = 0
                     withContext(Dispatchers.IO) {
                         for (item in targets) {
                             try {
-                                // v0.1.29: los elementos SAF se borran por
-                                // DocumentFile (no hay File utilizable).
-                                val ok = if (item.viaSaf && item.docUri != null) {
-                                    DocumentFile.fromSingleUri(requireContext(), item.docUri)
-                                        ?.delete() == true
-                                } else {
-                                    val f = item.file
-                                    if (f == null) false
-                                    else if (f.isDirectory) f.deleteRecursively() else f.delete()
+                                val ok = when {
+                                    item.viaAdb && item.adbPath != null ->
+                                        adb.deleteShell(item.adbPath)
+                                    item.viaSaf && item.docUri != null -> {
+                                        val doc = ObbSaf.findChildNode(ctx, currentDir, item.name)
+                                            ?: DocumentFile.fromSingleUri(ctx, item.docUri)
+                                        doc?.delete() == true
+                                    }
+                                    else -> {
+                                        val f = item.file
+                                        if (f == null) false
+                                        else (if (f.isDirectory) f.deleteRecursively() else f.delete()) ||
+                                            (adb.connected && adb.deleteShell(f.absolutePath.filterNot { it in ZERO_WIDTH_CHARS }))
+                                    }
                                 }
                                 if (ok) done++
                             } catch (_: Exception) {
@@ -1072,11 +1935,11 @@ class FileExplorerFragment : Fragment() {
                     }
                     if (!isAdded) return@launch
                     StartupLog.mark(
-                        requireContext(),
+                        ctx,
                         "explorador: borrados $done de ${targets.size} (${targets.joinToString(", ") { it.name }.take(300)})"
                     )
                     Toast.makeText(
-                        requireContext(),
+                        ctx,
                         getString(R.string.files_deleted, done),
                         Toast.LENGTH_LONG
                     ).show()
@@ -1099,12 +1962,18 @@ class FileExplorerFragment : Fragment() {
                 val name = input.text.toString().trim()
                 if (name.isBlank() || name.contains("/")) return@setPositiveButton
                 viewLifecycleOwner.lifecycleScope.launch {
+                    val ctx = requireContext()
+                    val adb = GiraAdbManager.getInstance(ctx)
+                    val ioDir = effectiveIoDir(currentDir)
                     val ok = withContext(Dispatchers.IO) {
-                        File(currentDir, name).mkdir()
+                        val target = File(ioDir, name)
+                        target.mkdir() ||
+                            (adb.connected && adb.mkdirShell(File(currentDir, name).absolutePath)) ||
+                            (ObbSaf.findDirNode(ctx, currentDir)?.createDirectory(name) != null)
                     }
                     if (!isAdded) return@launch
                     Toast.makeText(
-                        requireContext(),
+                        ctx,
                         if (ok) getString(R.string.files_folder_created, name)
                         else getString(R.string.files_folder_failed),
                         Toast.LENGTH_LONG
@@ -1156,23 +2025,28 @@ class FileExplorerFragment : Fragment() {
             holder.badge.setTextColor(fg)
             holder.name.text = item.name
             holder.meta.text = if (item.isDirectory) {
-                val count = try {
-                    // v0.1.29: los directorios SAF se cuentan por
-                    // DocumentFile (File.listFiles() devuelve null).
-                    if (item.viaSaf && item.docUri != null) {
-                        DocumentFile.fromSingleUri(holder.itemView.context, item.docUri)
-                            ?.listFiles()?.size ?: 0
-                    } else {
-                        item.file?.listFiles()?.size ?: 0
+                when {
+                    item.viaAdb || item.viaAlias -> holder.itemView.context.getString(
+                        R.string.files_adb_dir_meta,
+                        dateFmt.format(Date(item.lastModified))
+                    )
+                    item.viaSaf -> holder.itemView.context.getString(
+                        R.string.files_saf_dir_meta,
+                        dateFmt.format(Date(item.lastModified))
+                    )
+                    else -> {
+                        val count = try {
+                            item.file?.listFiles()?.size ?: 0
+                        } catch (_: Exception) {
+                            0
+                        }
+                        holder.itemView.context.getString(
+                            R.string.files_dir_meta,
+                            count,
+                            dateFmt.format(Date(item.lastModified))
+                        )
                     }
-                } catch (_: Exception) {
-                    0
                 }
-                holder.itemView.context.getString(
-                    R.string.files_dir_meta,
-                    count,
-                    dateFmt.format(Date(item.lastModified))
-                )
             } else {
                 "${RepoAdapter.formatSize(item.size)} · ${dateFmt.format(Date(item.lastModified))}"
             }

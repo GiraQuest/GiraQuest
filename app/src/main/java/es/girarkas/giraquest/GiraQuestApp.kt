@@ -6,6 +6,7 @@ import android.os.Environment
 import es.girarkas.giraquest.crash.CrashReporter
 import es.girarkas.giraquest.crash.StartupLog
 import es.girarkas.giraquest.install.InstallerSession
+import es.girarkas.giraquest.ui.LocaleHelper
 
 /**
  * Application de GiraQuest.
@@ -44,8 +45,13 @@ class GiraQuestApp : Application() {
         }
     }
 
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(LocaleHelper.wrap(base))
+    }
+
     override fun onCreate() {
         super.onCreate()
+        LocaleHelper.applyToApplication(this)
         // El proceso auxiliar :phoenix solo mata el PID antiguo y relanza MainActivity:
         // no debe tocar StartupLog ni lanzar hilos de limpieza.
         if (getProcessName().endsWith(":phoenix")) return

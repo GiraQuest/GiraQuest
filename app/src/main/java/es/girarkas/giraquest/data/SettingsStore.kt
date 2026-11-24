@@ -109,6 +109,15 @@ class SettingsStore(private val context: Context) {
         prefs.edit().putBoolean("permissions_onboarding_done", done).commit()
     }
 
+    /** Idioma seleccionado por el usuario ("" = automático del sistema). */
+    var appLanguage: String
+        get() = prefs.getString("app_language", "") ?: ""
+        set(v) = prefs.edit().putString("app_language", v).apply()
+
+    fun setAppLanguageSync(lang: String) {
+        prefs.edit().putString("app_language", lang).commit()
+    }
+
     /** Marca temporal del último reinicio automático para aplicar
      *  MOUNT_EXTERNAL_INSTALLER tras conceder REQUEST_INSTALL_PACKAGES. */
     val lastMountRestartMs: Long
@@ -558,6 +567,20 @@ class SettingsStore(private val context: Context) {
     var obbSafTreeKind: String
         get() = prefs.getString("obb_saf_tree_kind", "") ?: ""
         set(v) = prefs.edit().putString("obb_saf_tree_kind", v).apply()
+
+    /** v0.1.49: árboles SAF adicionales concedidos desde el explorador
+     *  (p. ej. Android/data o subcarpetas Android/data/<paquete>). Se
+     *  guardan aparte de obbSafTreeUri para no alterar la gestión de OBB. */
+    var safTreeUris: Set<String>
+        get() = (prefs.getStringSet("saf_tree_uris", emptySet()) ?: emptySet()).toSet()
+        set(v) = prefs.edit().putStringSet("saf_tree_uris", HashSet(v)).apply()
+
+    fun addSafTreeUri(uri: String) {
+        if (uri.isBlank()) return
+        val next = safTreeUris.toMutableSet()
+        next.add(uri)
+        safTreeUris = next
+    }
 
     /** Emparejamiento ADB persistido: puerto de conexión y host. */
     var adbPaired: Boolean

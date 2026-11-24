@@ -8,7 +8,7 @@ Salida: deps/artifacts/<group>__<artifact>-<version>.<ext>, deps/resolved.json
 import json, os, re, subprocess, sys
 import xml.etree.ElementTree as ET
 
-BASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deps")
+BASE = os.path.expanduser("~/workspace/giraquest-port/manual-build/deps")
 POM_DIR = os.path.join(BASE, "poms")
 ART_DIR = os.path.join(BASE, "artifacts")
 os.makedirs(POM_DIR, exist_ok=True)

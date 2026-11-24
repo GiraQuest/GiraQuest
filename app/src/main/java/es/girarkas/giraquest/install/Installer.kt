@@ -59,7 +59,7 @@ sealed class InstallProgress {
      * su sitio (sin Toast como única señal).
      */
     data class ObbPending(val packageName: String, val gameName: String, val message: String, val reason: String) : InstallProgress()
-    data class Done(val ok: Boolean, val message: String) : InstallProgress()
+    data class Done(val ok: Boolean, val message: String, val silent: Boolean = false) : InstallProgress()
 }
 
 /**
@@ -237,9 +237,9 @@ class Installer(private val context: Context) {
 
     private fun formatEta(seconds: Long): String {
         return when {
-            seconds < 60 -> "$seconds s"
-            seconds < 3600 -> "${seconds / 60} min"
-            else -> "${seconds / 3600} h ${seconds % 3600 / 60} min"
+            seconds < 60 -> context.getString(R.string.eta_seconds, seconds)
+            seconds < 3600 -> context.getString(R.string.eta_minutes, seconds / 60)
+            else -> context.getString(R.string.eta_hours_minutes, seconds / 3600, (seconds % 3600) / 60)
         }
     }
 
@@ -263,20 +263,16 @@ class Installer(private val context: Context) {
 
     private fun emit(p: InstallProgress) {
         _progressShared.value = p
-        if (p is InstallProgress.Done && p.message.isNotBlank()) {
-            if (p.ok && !p.message.startsWith("OBB completado:")) {
+        if (p is InstallProgress.Done && p.message.isNotBlank() && !p.silent) {
+            if (p.ok) {
                 InstallSuccessEvents.emit(
-                    gameName = activeInstallName ?: "Juego instalado",
+                    gameName = activeInstallName ?: context.getString(R.string.install_success_generic),
                     detail = p.message,
                     packageName = activeInstallPackage ?: "",
                 )
-            } else if (!p.ok &&
-                !p.message.startsWith("Ya se está instalando") &&
-                !p.message.startsWith("Ya hay una instalación en curso") &&
-                p.message != "Instalación cancelada."
-            ) {
+            } else {
                 InstallFailureEvents.emit(
-                    gameName = activeInstallName ?: "Instalación fallida",
+                    gameName = activeInstallName ?: context.getString(R.string.install_failed_generic),
                     reason = p.message,
                     packageName = activeInstallPackage ?: "",
                 )
@@ -301,13 +297,14 @@ class Installer(private val context: Context) {
             emit(
                 InstallProgress.Done(
                     false,
-                    "Ya se está instalando ${entry.displayName}: espera a que termine."
+                    context.getString(R.string.install_already_running, entry.displayName),
+                    silent = true
                 )
             )
             return
         }
         // Emitir estado inicial síncronamente para limpiar cualquier progreso viejo (ej. 100% previo).
-        emit(InstallProgress.ExtractingObb("Preparando ${entry.displayName}…"))
+        emit(InstallProgress.ExtractingObb(context.getString(R.string.install_preparing, entry.displayName)))
         val lockFile = File(workDirFor(entry), ".installing")
         try {
             if (lockFile.exists()) {
@@ -322,7 +319,8 @@ class Installer(private val context: Context) {
                     emit(
                         InstallProgress.Done(
                             false,
-                            "Ya hay una instalación en curso de ${entry.displayName} (candado en disco): espera a que termine."
+                            context.getString(R.string.install_already_running_lock, entry.displayName),
+                            silent = true
                         )
                     )
                     return
@@ -352,7 +350,7 @@ class Installer(private val context: Context) {
                 // min): la extracción concurrente robaba CPU/IO
                 // (BulletStorm 23 MB/s mientras Arizona iba a 2-5 MB/s).
                 if (!installMutex.tryLock()) {
-                    val other = activeInstallName ?: "otro juego"
+                    val other = activeInstallName ?: context.getString(R.string.install_another_game)
                     StartupLog.mark(
                         context,
                         "install: ${entry.displayName} rechazado, ya se está instalando $other"
@@ -360,7 +358,8 @@ class Installer(private val context: Context) {
                     emit(
                         InstallProgress.Done(
                             false,
-                            "Ya hay una instalación en curso ($other). Espera a que termine para instalar ${entry.displayName}."
+                            context.getString(R.string.install_another_running, other, entry.displayName),
+                            silent = true
                         )
                     )
                     return@launch
@@ -611,7 +610,7 @@ class Installer(private val context: Context) {
                 )
             }
             if (pending != null) {
-                val reason = pending.lastError.ifBlank { "pendiente de copiar" }
+                val reason = pending.lastError.ifBlank { context.getString(R.string.obb_reason_pending) }
                 return when {
                     !Environment.isExternalStorageManager() -> ObbUiState.NotGranted(expected)
                     record?.obbState == ObbRecordState.FAILED -> ObbUiState.Failed(
@@ -624,18 +623,18 @@ class Installer(private val context: Context) {
             return when (record?.obbState) {
                 ObbRecordState.COMPLETE -> ObbUiState.Failed(
                     expected,
-                    "el OBB estaba copiado pero ya no está completo en /Android/obb/$packageName"
+                    context.getString(R.string.obb_reason_missing_after_copy, packageName)
                 )
                 ObbRecordState.NOT_GRANTED -> ObbUiState.NotGranted(expected)
-                ObbRecordState.FAILED -> ObbUiState.Failed(expected, record.obbError.ifBlank { "la copia falló" })
-                else -> ObbUiState.Pending(expected, "pendiente de copiar")
+                ObbRecordState.FAILED -> ObbUiState.Failed(expected, record.obbError.ifBlank { context.getString(R.string.obb_reason_copy_failed) })
+                else -> ObbUiState.Pending(expected, context.getString(R.string.obb_reason_pending))
             }
         }
         if (landed.isNotEmpty()) {
             return ObbUiState.Copied(landed, landed.sumOf { it.size }, record?.obbCompletedAtMs ?: 0L)
         }
         if (pending != null) {
-            return ObbUiState.Pending(emptyList(), pending.lastError.ifBlank { "pendiente de copiar" })
+            return ObbUiState.Pending(emptyList(), pending.lastError.ifBlank { context.getString(R.string.obb_reason_pending) })
         }
         // v0.1.28: SIN información (ni esperados, ni copiados, ni
         // pendiente) NO se puede decir "sin OBB". Solo es NoObb cuando
@@ -646,10 +645,10 @@ class Installer(private val context: Context) {
         return when (record?.obbState) {
             ObbRecordState.NO_OBB -> ObbUiState.NoObb
             ObbRecordState.PENDING -> ObbUiState.Pending(
-                emptyList(), record.obbError.ifBlank { "pendiente de copiar" }
+                emptyList(), record.obbError.ifBlank { context.getString(R.string.obb_reason_pending) }
             )
             ObbRecordState.FAILED -> ObbUiState.Failed(
-                emptyList(), record.obbError.ifBlank { "la copia del OBB falló" }
+                emptyList(), record.obbError.ifBlank { context.getString(R.string.obb_reason_obb_copy_failed) }
             )
             ObbRecordState.NOT_GRANTED -> ObbUiState.NotGranted(emptyList())
             else -> ObbUiState.Unknown
@@ -732,7 +731,7 @@ class Installer(private val context: Context) {
             val rec = settings.getInstallRecord(packageName)
             InstallSuccessEvents.emit(
                 gameName = rec?.gameName ?: packageName,
-                detail = "OBB completado → /Android/obb/$packageName/",
+                detail = context.getString(R.string.obb_completed_detail, packageName),
                 packageName = packageName,
             )
         }
@@ -784,13 +783,13 @@ class Installer(private val context: Context) {
         // se colgaba en el connect (log 06:00:22: última línea "adb
         // connect: huella …" y nada después): la extracción YA había
         // terminado pero ninguna fase posterior se emitía.
-        emit(InstallProgress.InstallingApk("Extracción terminada. Conectando con el depurador…"))
+        emit(InstallProgress.InstallingApk(context.getString(R.string.install_extract_done_adb)))
 
         // 4. ¿ADB disponible? Si no, intentar conectar; si sigue sin haberlo, fallback.
         val adb = adbReady()
         if (adb == null) {
             StartupLog.mark(context, "install: ADB no disponible, fallback instalador del sistema")
-            emit(InstallProgress.InstallingApk("ADB no disponible: instalando con confirmación del sistema. El OBB se copiará a su carpeta tras instalar la APK."))
+            emit(InstallProgress.InstallingApk(context.getString(R.string.install_no_adb_fallback)))
             val fb = installViaSystemFallback(entry, apkFile, obbStaging)
             // v0.1.25: install.txt SIN ADB — si existe y la APK se instaló,
             // ejecutar lo traducible con I/O Java directo (push/cp/mv/mkdir/rm,
@@ -823,11 +822,11 @@ class Installer(private val context: Context) {
                     updateRecord(entry) {
                         it.copy(
                             state = InstallRecordState.FAILED,
-                            error = "install.txt falló en: ${step.line}",
+                            error = context.getString(R.string.install_txt_failed_short, step.line),
                             updatedAtMs = System.currentTimeMillis()
                         )
                     }
-                    emit(InstallProgress.Done(false, "install.txt falló en: ${step.line} — ${step.output}"))
+                    emit(InstallProgress.Done(false, context.getString(R.string.install_txt_failed_detail, step.line, step.output)))
                     return
                 }
             }
@@ -843,39 +842,32 @@ class Installer(private val context: Context) {
                     updatedAtMs = System.currentTimeMillis()
                 )
             }
-            emit(InstallProgress.Done(true, "${entry.displayName} instalado (install.txt)."))
+            emit(InstallProgress.Done(true, context.getString(R.string.install_txt_done, entry.displayName)))
             return
         }
 
         // 6. Instalar APK vía ADB shell.
-        emit(InstallProgress.InstallingApk("Instalando ${entry.displayName}…"))
+        emit(InstallProgress.InstallingApk(context.getString(R.string.install_installing_game, entry.displayName)))
         val installRes = adb.installApk(apkFile.absolutePath)
         if (!adb.installSucceeded(installRes)) {
-            // v0.1.16: el fallo de pm install quedaba INVISIBLE en el
-            // StartupLog (solo un Toast) y sin salida: si el transporte
-            // ADB murió durante la descarga+extracción, cae al
-            // instalador del sistema (el APK se instala con confirmación
-            // y se avisa de que el OBB no se copia sin ADB). Un pm
-            // fallido de verdad (INSTALL_FAILED_…) no es transporte y
-            // sigue mostrando su motivo.
             StartupLog.mark(
                 context,
                 "install: pm install FALLÓ: ${pmFailureDetail(installRes)} (code=${installRes.code})"
             )
             if (GiraAdbManager.isTransportErrorText(installRes.error)) {
                 StartupLog.mark(context, "install: error de transporte ADB, fallback instalador del sistema")
-                emit(InstallProgress.InstallingApk("La conexión ADB se perdió: instalando con confirmación del sistema. El OBB se copiará a su carpeta tras instalar la APK."))
+                emit(InstallProgress.InstallingApk(context.getString(R.string.install_adb_lost_fallback)))
                 installViaSystemFallback(entry, apkFile, obbStaging)
                 return
             }
             updateRecord(entry) {
                 it.copy(
                     state = InstallRecordState.FAILED,
-                    error = "pm install falló: ${pmFailureDetail(installRes)}",
+                    error = context.getString(R.string.install_pm_failed, pmFailureDetail(installRes)),
                     updatedAtMs = System.currentTimeMillis()
                 )
             }
-            emit(InstallProgress.Done(false, "pm install falló: ${pmFailureDetail(installRes)}"))
+            emit(InstallProgress.Done(false, context.getString(R.string.install_pm_failed, pmFailureDetail(installRes))))
             return
         }
         updateRecord(entry) {
@@ -888,7 +880,7 @@ class Installer(private val context: Context) {
 
         // 7. Copiar OBB (esto es lo que una app normal NO puede hacer vía ADB).
         if (obbStaging != null) {
-            emit(InstallProgress.CopyingObb("Copiando OBB…"))
+            emit(InstallProgress.CopyingObb(context.getString(R.string.install_copying_obb)))
             // v0.1.21: primero la copia DIRECTA (Java, sin ADB): si el
             // permiso está concedido y el FUSE lo permite, el OBB se
             // copia aunque el ADB esté muerto (y el ADB acaba de morir
@@ -947,10 +939,7 @@ class Installer(private val context: Context) {
                         InstallProgress.ObbPending(
                             entry.packageName,
                             entry.displayName,
-                            // v0.1.36: UNA línea corta en la lista; el
-                            // motivo completo queda en `reason` (log y
-                            // ficha del juego), no en el mensaje.
-                            "APK instalada — OBB pendiente",
+                            context.getString(R.string.install_apk_done_obb_pending),
                             reason
                         )
                     )
@@ -1006,22 +995,21 @@ class Installer(private val context: Context) {
         emit(
             InstallProgress.Done(
                 true,
-                "${entry.displayName} ${entry.versionName} instalado por completo ($obbDetail)."
+                context.getString(R.string.install_complete_with_detail, entry.displayName, entry.versionName, obbDetail)
             )
         )
         InstallNotifier.notifyComplete(
             context,
             entry.packageName, entry.versionCode, entry.displayName,
-            "${entry.displayName} instalado por completo: $obbDetail → /Android/obb/${entry.packageName}/"
+            context.getString(R.string.install_complete_notif_detail, entry.displayName, obbDetail, entry.packageName)
         )
-        // v0.1.19: el ADB está vivo ahora: aprovechar para completar OBBs
-        // pendientes de otros juegos (p. ej. instalados por fallback).
         val completedOthers = completePendingObbs(force = true)
         if (completedOthers.isNotEmpty()) {
             emit(
                 InstallProgress.Done(
                     true,
-                    "OBB completado: ${completedOthers.joinToString(", ")}."
+                    context.getString(R.string.obb_completed_toast, completedOthers.joinToString(", ")),
+                    silent = true
                 )
             )
         }
@@ -1089,9 +1077,9 @@ class Installer(private val context: Context) {
         val size = formatSizeBytes(bytes)
         return when {
             files.isEmpty() -> "APK"
-            obbCount == files.size -> "APK + $obbCount OBB ($size)"
-            obbCount == 0 -> "APK + ${files.size} archivos de datos ($size)"
-            else -> "APK + $obbCount OBB + ${files.size - obbCount} archivos ($size)"
+            obbCount == files.size -> context.getString(R.string.placed_detail_obb, obbCount, size)
+            obbCount == 0 -> context.getString(R.string.placed_detail_data, files.size, size)
+            else -> context.getString(R.string.placed_detail_mixed, obbCount, files.size - obbCount, size)
         }
     }
 
@@ -1117,7 +1105,7 @@ class Installer(private val context: Context) {
             onProgress = { p -> emit(InstallProgress.DownloadingApk(p.percent, p.speedBytesPerSec)) }
         )) {
             is DownloadResult.Failed -> {
-                emit(InstallProgress.Done(false, "No se pudo descargar el APK: ${r.reason}"))
+                emit(InstallProgress.Done(false, context.getString(R.string.install_apk_download_failed, r.reason)))
                 return null
             }
             is DownloadResult.Ok -> { /* seguir */ }
@@ -1144,19 +1132,19 @@ class Installer(private val context: Context) {
                 onProgress = { p -> emit(InstallProgress.DownloadingObb(p.percent, p.speedBytesPerSec)) }
             )) {
                 is DownloadResult.Failed -> {
-                    emit(InstallProgress.Done(false, "No se pudo descargar el OBB: ${r.reason}"))
+                    emit(InstallProgress.Done(false, context.getString(R.string.install_obb_download_failed, r.reason)))
                     return null
                 }
                 is DownloadResult.Ok -> { /* seguir */ }
             }
-            emit(InstallProgress.ExtractingObb("Extrayendo OBB…"))
+            emit(InstallProgress.ExtractingObb(context.getString(R.string.install_extracting_obb)))
             val extracted = File(dir, "obb_extracted")
             ArchiveExtractor.extract(obbFile, extracted) { written, total, _ ->
                 val pct = if (total > 0) ((written * 100) / total).toInt().coerceIn(0, 100) else -1
                 if (pct >= 0) {
                     emit(
                         InstallProgress.ExtractingObb(
-                            "Extrayendo OBB… $pct% (${written / 1_048_576} MB de ${total / 1_048_576} MB)",
+                            context.getString(R.string.install_extracting_obb_pct, pct, written / 1_048_576, total / 1_048_576),
                             pct,
                         )
                     )
@@ -1253,7 +1241,7 @@ class Installer(private val context: Context) {
             "install: ya descargado, instalando desde disco sin re-descargar " +
                 "(APK ${apkFile.length()} bytes, OBB=${obbStaging != null}, install.txt=${installTxt != null})"
         )
-        emit(InstallProgress.InstallingApk("Instalando ${entry.displayName} desde lo descargado…"))
+        emit(InstallProgress.InstallingApk(context.getString(R.string.install_from_disk, entry.displayName)))
         return PreparedInstall(apkFile, obbStaging, installTxt, extracted, extractArchivesFirst = false)
     }
 
@@ -1274,9 +1262,12 @@ class Installer(private val context: Context) {
         if (knownSize != null && knownSize.totalBytes > 0) {
             when (val space = checkSpace(knownSize.totalBytes, knownSize.totalBytes)) {
                 is SpaceCheck.NoFit -> {
-                    val msg = "${entry.displayName} ocupa ${formatSizeBytes(knownSize.totalBytes)} " +
-                        "y solo tienes ${formatSizeBytes(space.freeBytes)} libres. " +
-                        "Libera espacio o elige otro juego."
+                    val msg = context.getString(
+                        R.string.install_no_space_before,
+                        entry.displayName,
+                        formatSizeBytes(knownSize.totalBytes),
+                        formatSizeBytes(space.freeBytes)
+                    )
                     StartupLog.mark(context, "install vrp SIN ESPACIO: $msg")
                     updateRecord(entry) {
                         it.copy(
@@ -1343,9 +1334,9 @@ class Installer(private val context: Context) {
                 InstallProgress.Done(
                     false,
                     if (noSpace) {
-                        "Sin espacio en el almacenamiento: la descarga de ${entry.displayName} se quedó a medias y se limpiaron los trozos parciales. Libera espacio y reintenta."
+                        context.getString(R.string.install_no_space_during, entry.displayName)
                     } else {
-                        "No se pudo descargar el juego: ${(AdbHealth.fullChainReason(e) ?: e.toString()).take(500)}"
+                        context.getString(R.string.install_download_failed, (AdbHealth.fullChainReason(e) ?: e.toString()).take(500))
                     }
                 )
             )
@@ -1360,7 +1351,7 @@ class Installer(private val context: Context) {
                 updatedAtMs = System.currentTimeMillis()
             )
         }
-        emit(InstallProgress.ExtractingObb("Extrayendo juego…"))
+        emit(InstallProgress.ExtractingObb(context.getString(R.string.install_extracting_game)))
         StartupLog.mark(
             context,
             "install vrp: extrayendo $archiveLabel ($archiveBytes bytes) a game_extracted"
@@ -1382,7 +1373,7 @@ class Installer(private val context: Context) {
             )
             emit(
                 InstallProgress.ExtractingObb(
-                    "La extracción anterior se interrumpió; empieza de nuevo desde el principio (la descarga ya está guardada).",
+                    context.getString(R.string.install_extract_restarting),
                     0
                 )
             )
@@ -1417,10 +1408,16 @@ class Installer(private val context: Context) {
                 } else {
                     -1L
                 }
-                val etaText = if (etaSec >= 0) ", quedan ~${formatEta(etaSec)}" else ""
+                val etaText = if (etaSec >= 0) context.getString(R.string.install_eta_suffix, formatEta(etaSec)) else ""
                 emit(
                     InstallProgress.ExtractingObb(
-                        "Extrayendo juego… $pct% (${written / 1_048_576} MB de ${total / 1_048_576} MB, ${formatMBps(speed)}$etaText)",
+                        context.getString(
+                            R.string.install_extracting_game_pct,
+                            pct,
+                            written / 1_048_576,
+                            total / 1_048_576,
+                            "${formatMBps(speed)}$etaText"
+                        ),
                         pct,
                     )
                 )
@@ -1458,11 +1455,14 @@ class Installer(private val context: Context) {
                 emit(
                     InstallProgress.Done(
                         false,
-                        "La extracción lleva ${EXTRACT_STALL_MS / 60_000} minutos sin avanzar " +
-                            "(último: ${extractResult.lastPct}%, ${extractResult.written / 1_048_576} MB de " +
-                            "${extractResult.total / 1_048_576} MB a ${formatMBps(extractResult.speedMBps)}). " +
-                            "No se ha cancelado nada: el proceso sigue en segundo plano y el próximo intento " +
-                            "reanudará desde lo extraído."
+                        context.getString(
+                            R.string.install_extract_stalled,
+                            EXTRACT_STALL_MS / 60_000,
+                            extractResult.lastPct,
+                            extractResult.written / 1_048_576,
+                            extractResult.total / 1_048_576,
+                            formatMBps(extractResult.speedMBps)
+                        )
                     )
                 )
                 return null
@@ -1484,13 +1484,13 @@ class Installer(private val context: Context) {
                 emit(
                     InstallProgress.Done(
                         false,
-                        "No se pudo extraer el juego: ${(AdbHealth.fullChainReason(extractError) ?: extractError.toString()).take(500)}"
+                        context.getString(R.string.install_extract_failed, (AdbHealth.fullChainReason(extractError) ?: extractError.toString()).take(500))
                     )
                 )
                 return null
             }
             is ExtractOutcome.Ok -> {
-                emit(InstallProgress.ExtractingObb("Extracción terminada (100%)", 100))
+                emit(InstallProgress.ExtractingObb(context.getString(R.string.install_extract_complete_100), 100))
                 StartupLog.mark(context, "install vrp: extracción terminada OK (100%)")
                 try {
                     markerFile.delete()
@@ -1507,7 +1507,7 @@ class Installer(private val context: Context) {
             }
         }
         val apk = vrp.findGameApk(extracted) ?: run {
-            emit(InstallProgress.Done(false, "El archivo descargado no trae ningún APK."))
+            emit(InstallProgress.Done(false, context.getString(R.string.install_no_apk_found)))
             return null
         }
         val apkFile = File(dir, "app.apk")
@@ -1579,7 +1579,7 @@ class Installer(private val context: Context) {
             context,
             "install local: ${apkFile.name} (${apkFile.length()} bytes)"
         )
-        suspend fun finishOnMain(ok: Boolean, msg: String) {
+        suspend fun finishOnMain(ok: Boolean, msg: String, silent: Boolean = false) {
             val pkg = readPackageFromApk(apkFile) ?: apkFile.name
             val label = runCatching {
                 @Suppress("DEPRECATION")
@@ -1590,13 +1590,12 @@ class Installer(private val context: Context) {
                     ai.loadLabel(context.packageManager)?.toString()
                 }
             }.getOrNull()?.takeIf { it.isNotBlank() } ?: apkFile.nameWithoutExtension
-            if (ok) {
-                InstallSuccessEvents.emit(label, msg, pkg)
-            } else if (msg.isNotBlank() &&
-                !msg.startsWith("Ya hay una instalación en curso") &&
-                msg != "Instalación cancelada."
-            ) {
-                InstallFailureEvents.emit(label, msg, pkg)
+            if (!silent) {
+                if (ok) {
+                    InstallSuccessEvents.emit(label, msg, pkg)
+                } else if (msg.isNotBlank()) {
+                    InstallFailureEvents.emit(label, msg, pkg)
+                }
             }
             withContext(Dispatchers.Main) {
                 onDone(ok, msg)
@@ -1605,13 +1604,15 @@ class Installer(private val context: Context) {
         scope.launch {
             try {
                 if (!installMutex.tryLock()) {
-                    val other = activeInstallName ?: "otro juego"
+                    val other = activeInstallName ?: context.getString(R.string.install_another_game)
                     StartupLog.mark(context, "install local: rechazado, ya se está instalando $other")
-                    finishOnMain(false, "Ya hay una instalación en curso ($other). Espera a que termine.")
+                    finishOnMain(false, context.getString(R.string.install_local_busy, other), silent = true)
                     return@launch
                 }
                 try {
-                    installLocalApkLocked(apkFile, ::finishOnMain)
+                    installLocalApkLocked(apkFile) { ok, msg ->
+                        finishOnMain(ok, msg, silent = (!ok && msg == context.getString(R.string.fallback_cancelled)))
+                    }
                 } finally {
                     installMutex.unlock()
                 }
@@ -1647,15 +1648,14 @@ class Installer(private val context: Context) {
                         onDone(
                             ok,
                             if (ok) {
-                                "APK instalado con confirmación (la conexión ADB se perdió)."
+                                context.getString(R.string.install_local_fallback_ok)
                             } else {
-                                "La conexión ADB se perdió y el instalador del sistema tampoco pudo: " +
-                                    fallbackMessage(result)
+                                context.getString(R.string.install_local_fallback_fail, fallbackMessage(result))
                             }
                         )
                         return
                     }
-                    onDone(false, "pm install falló: ${pmFailureDetail(res)}")
+                    onDone(false, context.getString(R.string.install_pm_failed, pmFailureDetail(res)))
                     return
                 }
                 // OBB local: carpeta <nombre-apk>/ junto al APK, o <paquete>/.
@@ -1680,7 +1680,7 @@ class Installer(private val context: Context) {
                 // "Instaladas"); la oferta de OBB de la misma carpeta la
                 // hace el llamador (LocalObbOffer) tras onDone.
                 recordLocalInstalled(apkFile)
-                onDone(true, "${apkFile.name} instalado.")
+                onDone(true, context.getString(R.string.install_local_done, apkFile.name))
             } catch (e: Exception) {
                 onDone(false, "Error: ${e.message}")
             }
@@ -1833,12 +1833,11 @@ class Installer(private val context: Context) {
                 if (adb != null) {
                     val res = adb.uninstallGame(packageName)
                     settings.clearInstalledVersion(packageName)
-                    onDone(!res.isError, res.combined.ifBlank { "Desinstalado." })
+                    onDone(!res.isError, res.combined.ifBlank { context.getString(R.string.uninstall_adb_done) })
                 } else {
-                    // Fallback: intent de desinstalación del sistema.
                     PackageInstallerFallback.uninstallWithConfirmation(context, packageName)
                     settings.clearInstalledVersion(packageName)
-                    onDone(true, "Desinstalación solicitada (confirma en pantalla). El OBB puede quedar; bórralo desde el asistente con ADB.")
+                    onDone(true, context.getString(R.string.uninstall_system_requested))
                 }
             } catch (e: Exception) {
                 onDone(false, "Error: ${e.message}")
@@ -1955,17 +1954,20 @@ class Installer(private val context: Context) {
                             entry.packageName, entry.displayName, s.files.size, s.bytes
                         )
                     )
-                    val unverifiedNote = if (s.unverified) " (colocado por el sistema, sin verificar)" else ""
+                    val unverifiedNote = if (s.unverified) context.getString(R.string.obb_system_unverified_note) else ""
                     InstallNotifier.notifyComplete(
                         context, entry.packageName, entry.versionCode, entry.displayName,
-                        "Sesión del instalador: ${formatPlacedDetail(s.files, s.bytes)} " +
-                            "→ /Android/obb/${entry.packageName}/$unverifiedNote"
+                        context.getString(
+                            R.string.install_session_notif_detail,
+                            formatPlacedDetail(s.files, s.bytes),
+                            entry.packageName,
+                            unverifiedNote
+                        )
                     )
                     emit(
                         InstallProgress.Done(
                             true,
-                            "${entry.displayName} instalado por completo (sesión del instalador: " +
-                                "APK + OBB colocados por el sistema$unverifiedNote)."
+                            context.getString(R.string.install_session_complete, entry.displayName, unverifiedNote)
                         )
                     )
                     return FallbackOutcome(installed = true, obb = ObbOutcome.Copied(s.files, s.bytes, s.unverified))
@@ -1975,11 +1977,11 @@ class Installer(private val context: Context) {
                     updateRecord(entry) {
                         it.copy(
                             state = InstallRecordState.FAILED,
-                            error = "Instalación cancelada.",
+                            error = context.getString(R.string.fallback_cancelled),
                             updatedAtMs = System.currentTimeMillis()
                         )
                     }
-                    emit(InstallProgress.Done(false, "Instalación cancelada."))
+                    emit(InstallProgress.Done(false, context.getString(R.string.fallback_cancelled), silent = true))
                     return FallbackOutcome(installed = false, obb = ObbOutcome.NoObb)
                 }
                 is InstallerSession.SessionResult.NotAvailable -> {
@@ -2008,7 +2010,13 @@ class Installer(private val context: Context) {
                     updatedAtMs = System.currentTimeMillis()
                 )
             }
-            emit(InstallProgress.Done(false, fallbackMessage(result)))
+            emit(
+                InstallProgress.Done(
+                    false,
+                    fallbackMessage(result),
+                    silent = (result is PackageInstallerFallback.FallbackResult.Cancelled)
+                )
+            )
             return FallbackOutcome(installed = false, obb = ObbOutcome.NoObb)
         }
         settings.setInstalledVersion(entry.packageName, entry.versionCode)
@@ -2038,11 +2046,14 @@ class Installer(private val context: Context) {
                         updatedAtMs = System.currentTimeMillis()
                     )
                 }
-                InstallNotifier.notifyComplete(context, entry.packageName, entry.versionCode, entry.displayName, "APK reinstalada (OBB ya en su sitio)")
+                InstallNotifier.notifyComplete(
+                    context, entry.packageName, entry.versionCode, entry.displayName,
+                    context.getString(R.string.install_notif_apk_reinstalled_obb_present)
+                )
                 emit(
                     InstallProgress.Done(
                         true,
-                        "${entry.displayName} instalado por completo (APK reinstalada, OBB ya en su sitio)."
+                        context.getString(R.string.install_complete_reinstalled_obb_present, entry.displayName)
                     )
                 )
                 return FallbackOutcome(
@@ -2058,20 +2069,19 @@ class Installer(private val context: Context) {
                     updatedAtMs = System.currentTimeMillis()
                 )
             }
-            InstallNotifier.notifyComplete(context, entry.packageName, entry.versionCode, entry.displayName, "APK instalada (sin OBB)")
+            InstallNotifier.notifyComplete(
+                context, entry.packageName, entry.versionCode, entry.displayName,
+                context.getString(R.string.install_notif_apk_only)
+            )
             emit(
                 InstallProgress.Done(
                     true,
-                    "${entry.displayName} instalado por completo (APK, sin OBB)."
+                    context.getString(R.string.install_complete_apk_only, entry.displayName)
                 )
             )
             return FallbackOutcome(installed = true, obb = ObbOutcome.NoObb)
         }
-        // Con OBB: copia directa INMEDIATA. No se asume que la carpeta
-        // /Android/obb/<paquete>/ exista tras instalar (log 04:34:13 de
-        // el usuario: el ls dice "No such file or directory" tras reinstalar —
-        // el sistema NO la recreó; la copia directa hace mkdir -p).
-        emit(InstallProgress.CopyingObb("Copiando OBB…"))
+        emit(InstallProgress.CopyingObb(context.getString(R.string.install_copying_obb)))
         val obbOutcome = copyObbDirectNow(entry, obbStaging)
         return when (obbOutcome) {
             is ObbOutcome.Copied -> {
@@ -2093,7 +2103,7 @@ class Installer(private val context: Context) {
                     )
                 )
                 val unverifiedNote =
-                    if (obbOutcome.unverified) " (copiado, sin verificar)" else ""
+                    if (obbOutcome.unverified) context.getString(R.string.obb_copied_unverified_note) else ""
                 InstallNotifier.notifyComplete(
                     context, entry.packageName, entry.versionCode, entry.displayName,
                     "${formatPlacedDetail(obbOutcome.files, obbOutcome.bytes)} " +
@@ -2102,21 +2112,27 @@ class Installer(private val context: Context) {
                 emit(
                     InstallProgress.Done(
                         true,
-                        "${entry.displayName} instalado por completo: ${formatPlacedDetail(obbOutcome.files, obbOutcome.bytes)} " +
-                            "→ /Android/obb/${entry.packageName}/$unverifiedNote"
+                        context.getString(
+                            R.string.install_complete_obb_placed,
+                            entry.displayName,
+                            formatPlacedDetail(obbOutcome.files, obbOutcome.bytes),
+                            entry.packageName,
+                            unverifiedNote
+                        )
                     )
                 )
                 FallbackOutcome(installed = true, obb = obbOutcome)
             }
             is ObbOutcome.NotGranted -> {
+                val noPermReason = context.getString(R.string.obb_reason_no_perm)
                 recordPendingObb(
                     entry, obbStaging,
-                    lastError = "sin permiso MANAGE_EXTERNAL_STORAGE (acceso a todos los archivos)"
+                    lastError = noPermReason
                 )
                 updateRecord(entry) {
                     it.copy(
                         obbState = ObbRecordState.NOT_GRANTED,
-                        obbError = "falta el permiso de acceso a todos los archivos",
+                        obbError = context.getString(R.string.obb_missing_files_reason),
                         state = InstallRecordState.PENDING_OBB,
                         updatedAtMs = System.currentTimeMillis()
                     )
@@ -2124,16 +2140,14 @@ class Installer(private val context: Context) {
                 ObbEvents.emit(
                     ObbEvents.Event.Pending(
                         entry.packageName, entry.displayName,
-                        "sin permiso MANAGE_EXTERNAL_STORAGE"
+                        noPermReason
                     )
                 )
                 emit(
                     InstallProgress.ObbPending(
                         entry.packageName, entry.displayName,
-                        // v0.1.36: una línea corta; el detalle vive en
-                        // `reason` (log y ficha), no en el mensaje.
-                        "APK instalada — OBB pendiente",
-                        "sin permiso MANAGE_EXTERNAL_STORAGE"
+                        context.getString(R.string.install_apk_done_obb_pending),
+                        noPermReason
                     )
                 )
                 FallbackOutcome(installed = true, obb = obbOutcome)
@@ -2156,9 +2170,7 @@ class Installer(private val context: Context) {
                 emit(
                     InstallProgress.ObbPending(
                         entry.packageName, entry.displayName,
-                        // v0.1.36: una línea corta; el motivo completo
-                        // queda en `reason` (log y ficha del juego).
-                        "APK instalada — OBB pendiente",
+                        context.getString(R.string.install_apk_done_obb_pending),
                         obbOutcome.reason
                     )
                 )
@@ -2251,7 +2263,7 @@ class Installer(private val context: Context) {
         obbStaging: File?,
         obb: ObbOutcome,
     ) {
-        emit(InstallProgress.InstallingApk("Ejecutando install.txt sin ADB…"))
+        emit(InstallProgress.InstallingApk(context.getString(R.string.install_txt_no_adb_running)))
         val executor = InstallTxtNoAdb(
             workDir = installTxtDir,
             mainApk = apkFile,
@@ -2266,44 +2278,41 @@ class Installer(private val context: Context) {
             emit(InstallProgress.RunningInstallTxt(step.line))
         }
         val skippedDetail = report.skipped.joinToString("; ") { "${it.line} (${it.detail})" }
-        // v0.1.27: el mensaje final del OBB es el REAL (el que devolvió
-        // el fallback), nunca el falso "se copiará cuando la depuración
-        // esté activa". Si el OBB ya se copió, la instalación está
-        // completa; si quedó pendiente, el estado sigue EN CURSO
-        // (ObbPending) y la ficha/tarjeta lo muestran con Reintentar.
         val obbText = when (obb) {
             is ObbOutcome.NoObb -> ""
-            is ObbOutcome.Copied -> " OBB copiado: ${obb.files.size} archivos " +
-                "(${formatSizeBytes(obb.bytes)})." +
-                if (obb.unverified) " (copiado, sin verificar: no se pudo comprobar el tamaño en el destino)." else ""
-            is ObbOutcome.NotGranted -> " OBB pendiente: falta el permiso de acceso a " +
-                "todos los archivos — concédelo en Ajustes y pulsa Reintentar."
-            is ObbOutcome.Pending -> " OBB pendiente: ${obb.reason} — pulsa Reintentar."
-        }
-        val msg = buildString {
-            append("${entry.displayName} instalado")
-            append(" (install.txt: ${report.done.size} pasos ejecutados")
-            if (report.skipped.isNotEmpty()) {
-                append(", ${report.skipped.size} omitidos por necesitar ADB: $skippedDetail")
+            is ObbOutcome.Copied -> {
+                val unver = if (obb.unverified) context.getString(R.string.obb_copied_unverified_long_note) else ""
+                context.getString(R.string.install_txt_obb_copied, obb.files.size, formatSizeBytes(obb.bytes), unver)
             }
-            append(").")
-            append(obbText)
+            is ObbOutcome.NotGranted -> context.getString(R.string.install_txt_obb_not_granted)
+            is ObbOutcome.Pending -> context.getString(R.string.install_txt_obb_pending, obb.reason)
         }
+        val skippedNote = if (report.skipped.isNotEmpty()) {
+            context.getString(R.string.install_txt_skipped_note, report.skipped.size, skippedDetail)
+        } else {
+            ""
+        }
+        val msg = context.getString(
+            R.string.install_txt_no_adb_done,
+            entry.displayName,
+            report.done.size,
+            skippedNote,
+            obbText
+        )
         StartupLog.mark(context, "install: install.txt sin ADB — ${report.done.size} ejecutados, ${report.skipped.size} omitidos")
         when (obb) {
             is ObbOutcome.Copied, ObbOutcome.NoObb -> emit(InstallProgress.Done(true, msg))
             is ObbOutcome.NotGranted, is ObbOutcome.Pending -> {
                 val reason = when (obb) {
-                    is ObbOutcome.NotGranted -> "sin permiso MANAGE_EXTERNAL_STORAGE"
+                    is ObbOutcome.NotGranted -> context.getString(R.string.obb_reason_no_perm)
                     is ObbOutcome.Pending -> obb.reason
                     else -> ""
                 }
                 emit(
                     InstallProgress.ObbPending(
                         entry.packageName, entry.displayName,
-                        // v0.1.36: una línea corta; el mensaje completo
-                        // queda en el log, no en la lista.
-                        "APK instalada — OBB pendiente", reason
+                        context.getString(R.string.install_apk_done_obb_pending),
+                        reason
                     )
                 )
             }
@@ -3440,19 +3449,18 @@ class Installer(private val context: Context) {
         result: PackageInstallerFallback.FallbackResult,
     ): String = when (result) {
         is PackageInstallerFallback.FallbackResult.Success ->
-            "APK instalado con confirmación."
+            context.getString(R.string.fallback_success)
         is PackageInstallerFallback.FallbackResult.PermissionMissing ->
-            "Falta el permiso «Instalar apps desconocidas» para GiraQuest: se ha abierto Ajustes para concederlo; vuelve a intentarlo después."
+            context.getString(R.string.fallback_perm_missing)
         is PackageInstallerFallback.FallbackResult.Cancelled ->
-            "Instalación cancelada."
+            context.getString(R.string.fallback_cancelled)
         is PackageInstallerFallback.FallbackResult.Blocked ->
-            "El sistema bloqueó la instalación. Revisa «Instalar apps desconocidas» para GiraQuest en Ajustes."
+            context.getString(R.string.fallback_blocked)
         is PackageInstallerFallback.FallbackResult.Failed ->
             if ("INSTALL_FAILED_UPDATE_INCOMPATIBLE" in result.detail) {
-                // v0.1.29: en claro y con la salida (desinstalar).
                 context.getString(R.string.uninstall_signature)
             } else {
-                "El instalador del sistema falló: ${result.detail}"
+                context.getString(R.string.fallback_failed, result.detail)
             }
     }
 

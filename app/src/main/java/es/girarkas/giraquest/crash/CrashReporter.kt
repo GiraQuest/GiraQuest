@@ -6,6 +6,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import es.girarkas.giraquest.R
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -162,38 +163,36 @@ object CrashReporter {
 
         val startup = StartupLog.readStartupLog(activity)
         val message = buildString {
-            append("GiraQuest se cerró inesperadamente en el arranque anterior. Esto es lo que pasó:\n\n")
+            append(activity.getString(R.string.crash_dialog_intro))
+            append("\n\n")
             append(text.take(2000))
             if (!startup.isNullOrBlank()) {
-                append("\n\n--- Arranque (hasta dónde llegó) ---\n")
+                append("\n\n--- Log ---\n")
                 append(startup.takeLast(800))
             }
         }
         AlertDialog.Builder(activity)
-            .setTitle("La app se cerró antes")
+            .setTitle(R.string.crash_dialog_title)
             .setMessage(message)
-            .setPositiveButton("Compartir error") { _, _ ->
+            .setPositiveButton(R.string.crash_share_btn) { _, _ ->
                 val share = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "GiraQuest — informe de crash")
+                    putExtra(Intent.EXTRA_SUBJECT, "GiraQuest — crash report")
                     putExtra(
                         Intent.EXTRA_TEXT,
-                        text + "\n\n--- Arranque ---\n" + (startup ?: "")
+                        text + "\n\n--- Log ---\n" + (startup ?: "")
                     )
                 }
                 activity.startActivity(
-                    Intent.createChooser(share, "Compartir informe de crash")
+                    Intent.createChooser(share, activity.getString(R.string.crash_share_btn))
                 )
             }
-            .setNeutralButton("Cerrar", null)
-            .setNegativeButton("Borrar copia de Descargas") { _, _ ->
-                // Solo la copia de Descargas. La interna se conserva:
-                // es la única prueba del crash y solo la sobrescribe
-                // el siguiente crash.
+            .setNeutralButton(R.string.close, null)
+            .setNegativeButton(R.string.crash_delete_copy_btn) { _, _ ->
                 clearDownloadsCopyOnly(activity)
                 Toast.makeText(
                     activity,
-                    "Borrada solo la copia de Descargas. La copia interna se conserva.",
+                    R.string.crash_copy_deleted_toast,
                     Toast.LENGTH_LONG
                 ).show()
             }

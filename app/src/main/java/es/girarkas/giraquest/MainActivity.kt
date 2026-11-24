@@ -1,5 +1,6 @@
 package es.girarkas.giraquest
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
@@ -28,6 +29,7 @@ import es.girarkas.giraquest.ui.InstallFailureOverlay
 import es.girarkas.giraquest.ui.InstallSuccessOverlay
 import es.girarkas.giraquest.ui.InstalledFragment
 import es.girarkas.giraquest.ui.LocalFragment
+import es.girarkas.giraquest.ui.LocaleHelper
 import es.girarkas.giraquest.ui.PermissionsOnboardingFragment
 import es.girarkas.giraquest.ui.RepoFragment
 import es.girarkas.giraquest.ui.SettingsFragment
@@ -40,6 +42,13 @@ class MainActivity : AppCompatActivity() {
     companion object {
         /** Cada cuánto reintenta los OBBs pendientes mientras la app está abierta. */
         private const val OBB_RETRY_TIMER_MS = 60_000L
+
+        /** Pestaña a restaurar tras recrear la actividad (p. ej. cambio de idioma). */
+        var pendingTabId: Int? = null
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrap(newBase))
     }
 
     private var mountRestartTriggered = false
@@ -119,7 +128,7 @@ class MainActivity : AppCompatActivity() {
             val nav = findViewById<BottomNavigationView>(R.id.bottom_nav)
             if (nav == null) {
                 StartupLog.mark(this, "main bottom_nav NULL")
-                showTabError("No se encontró la barra de navegación (bottom_nav).")
+                showTabError(getString(R.string.main_nav_missing))
             } else {
                 nav.setOnItemSelectedListener { item -> switchToTab(item.itemId) }
                 nav.setOnItemReselectedListener { item ->
@@ -132,21 +141,26 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
-                if (savedInstanceState == null && !showOnboarding) {
-                    try {
-                        switchToTab(R.id.nav_repo)
-                        if (nav.selectedItemId != R.id.nav_repo) {
-                            nav.selectedItemId = R.id.nav_repo
+                val restoreTab = pendingTabId
+                pendingTabId = null
+                if (!showOnboarding) {
+                    val targetTab = restoreTab ?: if (savedInstanceState == null) R.id.nav_repo else null
+                    if (targetTab != null) {
+                        try {
+                            switchToTab(targetTab)
+                            if (nav.selectedItemId != targetTab) {
+                                nav.selectedItemId = targetTab
+                            }
+                        } catch (e: Throwable) {
+                            StartupLog.mark(this, "main initial tab FAILED: ${e.javaClass.simpleName}: ${e.message}")
+                            showTabError(getString(R.string.main_tab_open_error, e.message ?: ""))
                         }
-                    } catch (e: Throwable) {
-                        StartupLog.mark(this, "main initial tab FAILED: ${e.javaClass.simpleName}: ${e.message}")
-                        showTabError("No se pudo abrir la pestaña de repos: ${e.message}")
                     }
                 }
             }
         } catch (e: Throwable) {
             StartupLog.mark(this, "main nav setup FAILED: ${e.javaClass.simpleName}: ${e.message}")
-            showTabError("Error en la navegación: ${e.message}")
+            showTabError(getString(R.string.main_nav_error, e.message ?: ""))
         }
 
         // v0.1.28: mostrar el onboarding (barra inferior oculta mientras
@@ -237,7 +251,7 @@ class MainActivity : AppCompatActivity() {
                         if (completed.isNotEmpty()) {
                             Toast.makeText(
                                 this@MainActivity,
-                                "OBB completado: ${completed.joinToString(", ")}.",
+                                getString(R.string.obb_completed_toast, completed.joinToString(", ")),
                                 Toast.LENGTH_LONG
                             ).show()
                         }
@@ -290,7 +304,7 @@ class MainActivity : AppCompatActivity() {
             true
         } catch (e: Throwable) {
             StartupLog.mark(this, "main fragment switch FAILED: ${e.javaClass.simpleName}: ${e.message}")
-            showTabError("No se pudo abrir esa pestaña: ${e.message}")
+            showTabError(getString(R.string.main_tab_open_error, e.message ?: ""))
             false
         }
     }

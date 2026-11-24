@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -20,6 +21,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import es.girarkas.giraquest.BuildConfig
 import es.girarkas.giraquest.GiraQuestApp
+import es.girarkas.giraquest.MainActivity
 import es.girarkas.giraquest.R
 import es.girarkas.giraquest.crash.StartupLog
 import es.girarkas.giraquest.data.RepoManager
@@ -74,6 +76,11 @@ class SettingsFragment : Fragment() {
         settings = SettingsStore(requireContext())
         val repoManager = RepoManager(requireContext())
         val updater = Updater(requireContext())
+
+        val langSpinner = view.findViewById<Spinner>(R.id.spinner_settings_language)
+        LocaleHelper.bindSpinner(langSpinner, requireActivity()) {
+            MainActivity.pendingTabId = R.id.nav_settings
+        }
 
         val etFolder = view.findViewById<EditText>(R.id.et_download_folder)
         val etBandwidth = view.findViewById<EditText>(R.id.et_bandwidth)
